@@ -1,0 +1,32 @@
+{
+    "@@locale": "zh",
+    "home": "首页",
+    "profile": "个人中心",
+    "settings": "设置",
+    "login": "登录",
+    "logout": "退出登录",
+    "email": "邮箱",
+    "password": "密码",
+    "emailRequired": "请输入邮箱",
+    "passwordRequired": "请输入密码",
+    "loginFailed": "登录失败，请检查您的凭据。",
+    "dontHaveAccount": "还没有账户？立即注册",
+    "privacyPolicy": "隐私政策",
+    "displayStyle": "显示风格",
+    "themeSystem": "跟随系统",
+    "themeLight": "白天模式",
+    "themeDark": "黑夜模式",
+    "changePassword": "更改密码",
+    "clearCache": "清理缓存",
+    "pleaseLogin": "请登录以查看您的个人资料。",
+    "welcome": "欢迎您, {userName}!",
+    "@welcome": {
+        "description": "欢迎信息",
+        "placeholders": {
+            "userName": {
+                "type": "String",
+                "example": "张三"
+            }
+        }
+    }
+}

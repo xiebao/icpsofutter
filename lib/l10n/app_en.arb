@@ -1,0 +1,32 @@
+{
+    "@@locale": "en",
+    "home": "Home",
+    "profile": "Profile",
+    "settings": "Settings",
+    "login": "Login",
+    "logout": "Logout",
+    "email": "Email",
+    "password": "Password",
+    "emailRequired": "Email is required",
+    "passwordRequired": "Password is required",
+    "loginFailed": "Login failed. Please check your credentials.",
+    "dontHaveAccount": "Don't have an account? Sign up",
+    "privacyPolicy": "Privacy Policy",
+    "displayStyle": "Display Style",
+    "themeSystem": "System Default",
+    "themeLight": "Light Mode",
+    "themeDark": "Dark Mode",
+    "changePassword": "Change Password",
+    "clearCache": "Clear Cache",
+    "pleaseLogin": "Please log in to view your profile.",
+    "welcome": "Welcome, {userName}!",
+    "@welcome": {
+        "description": "A welcome message",
+        "placeholders": {
+            "userName": {
+                "type": "String",
+                "example": "John Doe"
+            }
+        }
+    }
+}
