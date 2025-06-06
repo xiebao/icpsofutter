@@ -22,13 +22,23 @@ class AuthProvider with ChangeNotifier {
       _isAuthenticated = true;
       // You can also fetch user profile here if needed
       // For now, we'll just set a placeholder user
-      _user = User(id: '1', name: 'Cached User', email: 'user@example.com');
+      _user = User(id: '1', name: 'Cached User', email: 'user@123.com');
       DioClient.setAuthToken(_token!);
     }
     notifyListeners();
   }
 
   Future<bool> login(String email, String password) async {
+    // 本地Mock账号（开发调试用）
+    if (email == 'test@123.com' && password == '123456') {
+      _token = 'mock_token';
+      _user = User(id: '1', name: '测试用户', email: email, avatarUrl: null);
+      _isAuthenticated = true;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', _token!);
+      notifyListeners();
+      return true;
+    }
     try {
       // IMPORTANT: Replace with your actual login API endpoint
       final response = await DioClient.instance.post('/auth/login', data: {
@@ -72,6 +82,11 @@ class AuthProvider with ChangeNotifier {
 
   // You can add register method similarly
   Future<bool> register(String name, String email, String password) async {
+    // 本地Mock注册（开发调试用）
+    if (email.endsWith('@123.com')) {
+      // 注册成功后自动登录
+      return await login(email, password);
+    }
     try {
       // IMPORTANT: Replace with your actual register API endpoint
       await DioClient.instance.post('/auth/register', data: {
