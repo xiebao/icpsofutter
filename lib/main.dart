@@ -8,6 +8,7 @@ import 'providers/theme_provider.dart';
 import 'utils/app_routes.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
+import 'pages/p2p_video_test_page.dart';
 
 void main() async {
   // Ensure that Flutter bindings are initialized
@@ -71,6 +72,7 @@ class MyApp extends StatelessWidget {
       // --- Routing Setup ---
       routes: {
         ...AppRoutes.routes..remove('/'),
+        '/p2p_video_test': (context) => const P2pVideoTestPage(),
       },
 
       // --- Home Screen Logic ---

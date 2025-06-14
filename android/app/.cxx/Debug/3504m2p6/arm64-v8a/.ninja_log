@@ -1,0 +1,17 @@
+# ninja log v5
+0	2581	1749810058	CMakeFiles/native-lib.dir/native-lib.cpp.o	3d9e4e3ae80df446
+2582	2716	1749810058	/Users/a0000/Documents/Ipc-app/main_app_framework/build/app/intermediates/cxx/Debug/3504m2p6/obj/arm64-v8a/libnative-lib.so	e2ee63a66a20ff88
+0	8	0	clean	4e9204c3f4180db0
+0	7	0	clean	4e9204c3f4180db0
+727	5623	1749811887	CMakeFiles/native-lib.dir/native-lib.cpp.o	3d9e4e3ae80df446
+5623	7005	1749811889	/Users/a0000/Documents/Ipc-app/main_app_framework/build/app/intermediates/cxx/Debug/3504m2p6/obj/arm64-v8a/libnative-lib.so	e2ee63a66a20ff88
+0	12	0	clean	4e9204c3f4180db0
+0	6	0	clean	4e9204c3f4180db0
+1	3251	1749813441	CMakeFiles/native-lib.dir/native-lib.cpp.o	3d9e4e3ae80df446
+1	717	1749813442	CMakeFiles/native-lib.dir/native-lib.cpp.o	3d9e4e3ae80df446
+717	3690	1749813445	/Users/a0000/Documents/Ipc-app/main_app_framework/build/app/intermediates/cxx/Debug/3504m2p6/obj/arm64-v8a/libnative-lib.so	e2ee63a66a20ff88
+3251	6725	1749813445	/Users/a0000/Documents/Ipc-app/main_app_framework/build/app/intermediates/cxx/Debug/3504m2p6/obj/arm64-v8a/libnative-lib.so	e2ee63a66a20ff88
+0	10	0	clean	4e9204c3f4180db0
+0	6	0	clean	4e9204c3f4180db0
+1	4346	1749813559	CMakeFiles/native-lib.dir/native-lib.cpp.o	3d9e4e3ae80df446
+4346	5230	1749813560	/Users/a0000/Documents/Ipc-app/main_app_framework/build/app/intermediates/cxx/Debug/3504m2p6/obj/arm64-v8a/libnative-lib.so	e2ee63a66a20ff88

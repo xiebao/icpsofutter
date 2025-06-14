@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/.cxx/Debug/3504m2p6/arm64-v8a",
+  "command": "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android21 --gcc-toolchain=/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64 --sysroot=/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dnative_lib_EXPORTS -I/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles/native-lib.dir/native-lib.cpp.o -c /Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp/native-lib.cpp",
+  "file": "/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp/native-lib.cpp"
+}
+]

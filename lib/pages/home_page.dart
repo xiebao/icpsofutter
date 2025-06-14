@@ -75,6 +75,13 @@ class HomeContent extends StatelessWidget {
             SizedBox(height: 20),
             Text('This is the main content for music scores.'),
             Text('You can start building your features here.'),
+            SizedBox(height: 40),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/p2p_video_test');
+              },
+              child: Text('P2P视频测试'),
+            ),
           ],
         ),
       ),

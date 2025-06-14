@@ -1,0 +1,12 @@
+# ninja log v5
+0	143	1749814622145647036	build.ninja	c328f3afc9ad4355
+0	9244	1749814434533079941	CMakeFiles/native-lib.dir/native-lib.cpp.o	ad6dde291e09db7a
+0	7	0	clean	6aa44f2f1c5f784b
+9245	11640	1749814437018358280	/Users/a0000/Documents/Ipc-app/main_app_framework/build/app/intermediates/cxx/Debug/2d1a1t6j/obj/arm64-v8a/libnative-lib.so	3d0d5789e98a562a
+0	21	0	clean	6aa44f2f1c5f784b
+0	7	0	clean	6aa44f2f1c5f784b
+0	12	0	clean	6aa44f2f1c5f784b
+0	8	0	clean	6aa44f2f1c5f784b
+0	8	0	clean	6aa44f2f1c5f784b
+0	7	0	clean	6aa44f2f1c5f784b
+0	8	0	clean	6aa44f2f1c5f784b
