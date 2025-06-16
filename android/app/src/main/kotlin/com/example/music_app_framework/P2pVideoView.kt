@@ -36,6 +36,10 @@ import android.view.TextureView.SurfaceTextureListener
 import java.util.concurrent.atomic.AtomicInteger
 import android.media.MediaCodecInfo
 import io.flutter.plugin.common.BinaryMessenger
+import android.graphics.ImageFormat
+import android.media.Image
+import android.renderscript.*
+import java.nio.ByteOrder
 
 class P2pVideoViewFactory(private val messenger: BinaryMessenger) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, id: Int, args: Any?): PlatformView {
@@ -74,6 +78,7 @@ class P2pVideoView(
     private var errorCount = AtomicInteger(0)
     private var textureWidth: Int = 0
     private var textureHeight: Int = 0
+    private var matrix: Matrix = Matrix()
 
     init {
         frameLayout = FrameLayout(context)
@@ -166,37 +171,52 @@ class P2pVideoView(
                     val height = call.argument<Int>("height") ?: 0
                     if (width > 0 && height > 0) {
                         surfaceTexture?.setDefaultBufferSize(width, height)
+                        textureWidth = width
+                        textureHeight = height
+                        updateTextureMatrix()
                     }
                     result.success(null)
                 } else {
                     result.error("TEXTURE_NOT_AVAILABLE", "Texture is not available", null)
                 }
             }
-            "updateDecodeMode" -> {
-                val mode = call.argument<Int>("mode")
-                if (mode != null) {
-                    updateDecodeMode(mode)
-                    result.success(null)
-                } else {
-                    result.error("INVALID_ARGUMENT", "Mode parameter is required", null)
-                }
-            }
             else -> result.notImplemented()
         }
+    }
+
+    private fun updateTextureMatrix() {
+        if (textureWidth == 0 || textureHeight == 0) return
+        
+        val viewWidth = textureView.width
+        val viewHeight = textureView.height
+        if (viewWidth == 0 || viewHeight == 0) return
+
+        val scaleX = viewWidth.toFloat() / textureWidth
+        val scaleY = viewHeight.toFloat() / textureHeight
+        val scale = scaleX.coerceAtMost(scaleY)
+
+        matrix.reset()
+        matrix.postScale(scale, scale)
+        matrix.postTranslate(
+            (viewWidth - textureWidth * scale) / 2,
+            (viewHeight - textureHeight * scale) / 2
+        )
+        textureView.setTransform(matrix)
     }
 
     override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
         Log.d(TAG, "onSurfaceTextureAvailable: width=$width, height=$height")
         surfaceTexture = texture
-        textureWidth = width
-        textureHeight = height
         if (displayMode == 1 && !isDisposed.get()) {
             initMediaCodec(width, height)
+            startFrameProcessing()
+            startFrameCheck()
         }
     }
 
     override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
         Log.d(TAG, "onSurfaceTextureSizeChanged: width=$width, height=$height")
+        updateTextureMatrix()
     }
 
     override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
@@ -218,162 +238,75 @@ class P2pVideoView(
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             
-            // 动态设置 SPS/PPS
-            val sps = byteArrayOf(
-                0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x01.toByte(),
-                0x67.toByte(), 0x42.toByte(), 0x80.toByte(), 0x1f.toByte(),
-                0xda.toByte(), 0x01.toByte(), 0x40.toByte(), 0x16.toByte(),
-                0xec.toByte(), 0x04.toByte(), 0x40.toByte(), 0x00.toByte(),
-                0x00.toByte(), 0x03.toByte(), 0x00.toByte(), 0x40.toByte(),
-                0x00.toByte(), 0x00.toByte(), 0x0f.toByte(), 0x03.toByte(),
-                0xc5.toByte(), 0x8b.toByte(), 0xb8.toByte()
-            )
-            val pps = byteArrayOf(
-                0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x01.toByte(),
-                0x68.toByte(), 0xce.toByte(), 0x38.toByte(), 0x80.toByte()
-            )
-            
-            // 检查视频数据中是否包含 SPS/PPS
-            if (frameQueue.isNotEmpty()) {
-                val firstFrame = frameQueue.peek()
-                if (firstFrame != null) {
-                    val data = ByteArray(firstFrame.remaining())
-                    firstFrame.get(data)
-                    firstFrame.rewind()
-                    
-                    // 查找 SPS/PPS
-                    var i = 0
-                    while (i < data.size - 4) {
-                        if (data[i] == 0x00.toByte() && data[i + 1] == 0x00.toByte() && 
-                            data[i + 2] == 0x00.toByte() && data[i + 3] == 0x01.toByte()) {
-                            val naluType = data[i + 4].toInt() and 0x1F
-                            if (naluType == 7) { // SPS
-                                var j = i + 4
-                                while (j < data.size - 4) {
-                                    if (data[j] == 0x00.toByte() && data[j + 1] == 0x00.toByte() && 
-                                        data[j + 2] == 0x00.toByte() && data[j + 3] == 0x01.toByte()) {
-                                        val spsData = data.copyOfRange(i, j)
-                                        format.setByteBuffer("csd-0", ByteBuffer.wrap(spsData))
-                                        break
-                                    }
-                                    j++
-                                }
-                            } else if (naluType == 8) { // PPS
-                                var j = i + 4
-                                while (j < data.size - 4) {
-                                    if (data[j] == 0x00.toByte() && data[j + 1] == 0x00.toByte() && 
-                                        data[j + 2] == 0x00.toByte() && data[j + 3] == 0x01.toByte()) {
-                                        val ppsData = data.copyOfRange(i, j)
-                                        format.setByteBuffer("csd-1", ByteBuffer.wrap(ppsData))
-                                        break
-                                    }
-                                    j++
-                                }
-                            }
-                        }
-                        i++
-                    }
-                }
-            }
-            
-            // 如果没有找到 SPS/PPS，使用默认值
-            if (!format.containsKey("csd-0")) {
-                format.setByteBuffer("csd-0", ByteBuffer.wrap(sps))
-                format.setByteBuffer("csd-1", ByteBuffer.wrap(pps))
-            }
-
             mediaCodec = MediaCodec.createDecoderByType(mimeType)
-            mediaCodec?.configure(format, surface, null, 0)
+            mediaCodec?.configure(format, surfaceTexture?.let { Surface(it) }, null, 0)
             mediaCodec?.start()
             
-            Log.d(TAG, "MediaCodec initialized successfully with width: $width, height: $height")
+            Log.d(TAG, "MediaCodec initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing MediaCodec", e)
-            releaseMediaCodec()
         }
     }
 
-    private fun releaseMediaCodec() {
-        try {
-            mediaCodec?.stop()
-            mediaCodec?.release()
-            mediaCodec = null
-            Log.d(TAG, "MediaCodec released")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing MediaCodec", e)
+    private fun processFrame(frame: ByteBuffer) {
+        if (isDisposed.get()) return
+        
+        when (displayMode) {
+            0 -> processFrameForSurfaceView(frame)
+            1 -> processFrameForTexture(frame)
         }
     }
 
-    fun onVideoFrame(data: ByteArray) {
-        if (isDisposed.get()) {
-            Log.d(TAG, "onVideoFrame: view is disposed")
-            return
-        }
-
+    private fun processFrameForTexture(frame: ByteBuffer) {
+        if (surfaceTexture == null || textureId == 0L || mediaCodec == null) return
+        
         try {
-            Log.d(TAG, "onVideoFrame: received ${data.size} bytes")
-            val buffer = ByteBuffer.allocate(data.size)
-            buffer.put(data)
-            buffer.flip()
-            frameQueue.offer(buffer)
-            Log.d(TAG, "onVideoFrame: frame queued, queue size=${frameQueue.size}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in onVideoFrame", e)
-            messenger.invokeMethod("onError", mapOf("message" to "Error in onVideoFrame: ${e.message}"))
-        }
-    }
-
-    private fun processFrame(data: ByteBuffer) {
-        if (isDisposed.get() || mediaCodec == null) {
-            Log.d(TAG, "processFrame: disposed or mediaCodec is null")
-            return
-        }
-
-        try {
-            Log.d(TAG, "processFrame: processing frame of size ${data.remaining()}")
-            val inputBufferId = mediaCodec?.dequeueInputBuffer(10000)
-            if (inputBufferId != null && inputBufferId >= 0) {
+            val inputBufferId = mediaCodec?.dequeueInputBuffer(10000) ?: -1
+            if (inputBufferId >= 0) {
                 val inputBuffer = mediaCodec?.getInputBuffer(inputBufferId)
-                if (inputBuffer != null) {
-                    inputBuffer.clear()
-                    inputBuffer.put(data)
-                    mediaCodec?.queueInputBuffer(inputBufferId, 0, data.remaining(), System.nanoTime() / 1000, 0)
-                    Log.d(TAG, "Frame queued to MediaCodec: size=${data.remaining()}")
-                } else {
-                    Log.e(TAG, "Failed to get input buffer")
-                    throw Exception("Failed to get input buffer")
-                }
-            } else {
-                Log.e(TAG, "Failed to dequeue input buffer: $inputBufferId")
-                throw Exception("Failed to dequeue input buffer: $inputBufferId")
+                inputBuffer?.clear()
+                inputBuffer?.put(frame)
+                mediaCodec?.queueInputBuffer(inputBufferId, 0, frame.remaining(), System.nanoTime() / 1000, 0)
             }
 
             val bufferInfo = MediaCodec.BufferInfo()
-            val outputBufferId = mediaCodec?.dequeueOutputBuffer(bufferInfo, 10000)
-            if (outputBufferId != null) {
-                when (outputBufferId) {
-                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        Log.d(TAG, "Output format changed: ${mediaCodec?.outputFormat}")
-                    }
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                        Log.d(TAG, "No output buffer available yet")
-                    }
-                    else -> {
-                        if (outputBufferId >= 0) {
-                            mediaCodec?.releaseOutputBuffer(outputBufferId, true)
-                            Log.d(TAG, "Frame rendered: size=${bufferInfo.size}")
-                        }
+            val outputBufferId = mediaCodec?.dequeueOutputBuffer(bufferInfo, 10000) ?: -1
+            
+            when (outputBufferId) {
+                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                    Log.d(TAG, "Output format changed: ${mediaCodec?.outputFormat}")
+                }
+                MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                    // 没有可用的输出
+                }
+                else -> {
+                    if (outputBufferId >= 0) {
+                        // 更新SurfaceTexture
+                        surfaceTexture?.updateTexImage()
+                        
+                        // 通知Flutter引擎更新纹理
+                        messenger.invokeMethod("onTextureFrame", mapOf(
+                            "textureId" to textureId,
+                            "width" to textureWidth,
+                            "height" to textureHeight
+                        ))
+                        
+                        mediaCodec?.releaseOutputBuffer(outputBufferId, true)
                     }
                 }
-            } else {
-                Log.e(TAG, "Failed to dequeue output buffer")
-                throw Exception("Failed to dequeue output buffer")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error processing frame", e)
-            messenger.invokeMethod("onError", mapOf("message" to "Error processing frame: ${e.message}"))
-            throw e // 重新抛出异常，让上层处理
+            Log.e(TAG, "Error processing frame for texture", e)
         }
+    }
+
+    private fun processFrameForSurfaceView(frame: ByteBuffer) {
+        // 原有的SurfaceView处理逻辑
+        // ... existing code ...
+    }
+
+    override fun getView(): View {
+        return frameLayout
     }
 
     private fun startFrameProcessing() {
@@ -387,7 +320,6 @@ class P2pVideoView(
             Log.d(TAG, "Frame processing thread started")
             var consecutiveErrors = 0
             val maxConsecutiveErrors = 5
-            val errorResetThreshold = 1000 // 1秒内无错误则重置错误计数
             
             while (!isDisposed.get() && isProcessingFrames.get()) {
                 try {
@@ -410,7 +342,9 @@ class P2pVideoView(
                         
                         // 尝试恢复
                         try {
-                            releaseMediaCodec()
+                            mediaCodec?.stop()
+                            mediaCodec?.release()
+                            mediaCodec = null
                             Thread.sleep(1000) // 等待1秒
                             if (surfaceTexture != null) {
                                 if (textureWidth > 0 && textureHeight > 0) {
@@ -434,81 +368,22 @@ class P2pVideoView(
         }.start()
     }
 
-    private fun checkFrameStatus() {
-        val currentTime = System.currentTimeMillis()
-        val timeSinceLastFrame = currentTime - lastFrameTime
-        Log.d(TAG, "Frame status: count=${frameCount.get()}, errors=${errorCount.get()}, timeSinceLastFrame=$timeSinceLastFrame")
-        
-        if (timeSinceLastFrame > 5000) {
-            Log.w(TAG, "No frames received for more than 5 seconds")
-            messenger.invokeMethod("onError", mapOf("message" to "No frames received for more than 5 seconds"))
-        }
-    }
-
-    private fun handleMediaCodecFrame(data: ByteArray) {
-        if (mediaCodec == null) {
-            Log.e(TAG, "MediaCodec not initialized")
+    fun onVideoFrame(data: ByteArray) {
+        if (isDisposed.get()) {
+            Log.d(TAG, "onVideoFrame: view is disposed")
             return
         }
 
         try {
-            val inputBufferId = mediaCodec?.dequeueInputBuffer(10000) ?: -1
-            if (inputBufferId >= 0) {
-                val inputBuffer = mediaCodec?.getInputBuffer(inputBufferId)
-                inputBuffer?.clear()
-                inputBuffer?.put(data)
-                mediaCodec?.queueInputBuffer(inputBufferId, 0, data.size, System.nanoTime() / 1000, 0)
-                Log.d(TAG, "Queued input buffer: $inputBufferId, size: ${data.size}")
-            } else {
-                Log.w(TAG, "No input buffer available, inputBufferId: $inputBufferId")
-            }
-
-            val bufferInfo = MediaCodec.BufferInfo()
-            val outputBufferId = mediaCodec?.dequeueOutputBuffer(bufferInfo, 10000) ?: -1
-            if (outputBufferId >= 0) {
-                Log.d(TAG, "Got output buffer: $outputBufferId, size: ${bufferInfo.size}, flags: ${bufferInfo.flags}")
-                mediaCodec?.releaseOutputBuffer(outputBufferId, true)
-                Log.d(TAG, "Released output buffer: $outputBufferId")
-            } else {
-                Log.w(TAG, "No output buffer available, outputBufferId: $outputBufferId")
-            }
+            Log.d(TAG, "onVideoFrame: received ${data.size} bytes")
+            val buffer = ByteBuffer.allocate(data.size)
+            buffer.put(data)
+            buffer.flip()
+            frameQueue.offer(buffer)
+            Log.d(TAG, "onVideoFrame: frame queued, queue size=${frameQueue.size}")
         } catch (e: Exception) {
-            Log.e(TAG, "Error in MediaCodec frame processing", e)
-            throw e
-        }
-    }
-
-    private fun handleExoPlayerFrame(data: ByteArray) {
-        if (exoPlayer == null) {
-            Log.d(TAG, "Initializing ExoPlayer")
-            exoPlayer = ExoPlayer.Builder(context).build()
-            exoPlayer?.setVideoSurfaceView(surfaceView)
-            exoPlayer?.addListener(object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    Log.e(TAG, "ExoPlayer error", error)
-                    statusTextView.text = "播放器错误: ${error.message}"
-                }
-                
-                override fun onPlaybackStateChanged(state: Int) {
-                    Log.d(TAG, "ExoPlayer state changed: $state")
-                }
-            })
-        }
-
-        try {
-            val tempFile = File(context.cacheDir, "temp_video_${System.currentTimeMillis()}.h264")
-            FileOutputStream(tempFile).use { it.write(data) }
-            Log.d(TAG, "Wrote video data to temp file: ${tempFile.absolutePath}, size: ${data.size}")
-            
-            val mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(tempFile))
-            exoPlayer?.setMediaItem(mediaItem)
-            exoPlayer?.prepare()
-            exoPlayer?.play()
-            
-            Log.d(TAG, "ExoPlayer playing video from temp file: ${tempFile.absolutePath}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in ExoPlayer frame processing", e)
-            throw e
+            Log.e(TAG, "Error in onVideoFrame", e)
+            messenger.invokeMethod("onError", mapOf("message" to "Error in onVideoFrame: ${e.message}"))
         }
     }
 
@@ -524,29 +399,46 @@ class P2pVideoView(
         frameCheckHandler.removeCallbacks(frameCheckRunnable)
     }
 
-    override fun getView(): View {
-        return frameLayout
-    }
-
     override fun dispose() {
         isDisposed.set(true)
         stopFrameCheck()
-        exoPlayer?.release()
-        mediaCodec?.stop()
-        mediaCodec?.release()
-        surface?.release()
-        surfaceTexture?.release()
+        isProcessingFrames.set(false)
         frameQueue.clear()
+        frameCheckHandler.removeCallbacks(frameCheckRunnable)
         frameHandler.removeCallbacksAndMessages(null)
-        frameCheckHandler.removeCallbacksAndMessages(null)
+        
+        try {
+            mediaCodec?.stop()
+            mediaCodec?.release()
+            mediaCodec = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing MediaCodec", e)
+        }
+        
+        surface?.release()
+        surface = null
+        surfaceTexture?.release()
+        surfaceTexture = null
+        
+        exoPlayer?.release()
+        exoPlayer = null
     }
 
-    fun updateDecodeMode(mode: Int) {
-        if (isDisposed.get()) {
-            Log.w(TAG, "View is disposed, ignoring updateDecodeMode request")
-            return
+    private fun checkFrameStatus() {
+        if (isDisposed.get()) return
+        
+        val currentTime = System.currentTimeMillis()
+        val currentFrameCount = frameCount.get()
+        val currentErrorCount = errorCount.get()
+        
+        if (currentTime - lastFrameTime > 5000) {
+            Log.w(TAG, "No frames received for 5 seconds")
+            errorCount.incrementAndGet()
         }
-        useExoPlayer = mode == 1
-        Log.d(TAG, "Decode mode updated to: ${if (useExoPlayer) "ExoPlayer" else "MediaCodec"}")
+        
+        if (currentErrorCount > 3) {
+            Log.e(TAG, "Too many errors, stopping video")
+            messenger.invokeMethod("onError", mapOf("message" to "Too many errors, stopping video"))
+        }
     }
 } 

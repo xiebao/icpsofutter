@@ -28,6 +28,7 @@ static std::atomic<long> g_textureId(0);
 static std::atomic<int> g_frameCount(0);
 static std::atomic<int> g_errorCount(0);
 static std::atomic<bool> g_isDisposed(false);
+static jlong g_flutterTextureId = 0;
 
 // 空实现的消息回调
 void RecbMsgData(void* pMsgData, int nLen) {
@@ -104,7 +105,7 @@ static void notifyError(const char* message) {
 }
 
 static void RecbVideoData(void* data, int length) {
-    LOGI("RecbVideoData called with length: %d", length);
+    LOGI("[自检] >>>>>>>>>>>> RecbVideoData called! length: %d", length);
     
     if (g_isDisposed || !g_vm || !g_p2pVideoView) {
         LOGE("RecbVideoData: Invalid state - disposed: %d, vm: %p, view: %p", 
@@ -331,13 +332,14 @@ Java_com_example_music_1app_1framework_MainActivity_setDevP2p(JNIEnv* env, jobje
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_music_1app_1framework_MainActivity_startP2pVideo(JNIEnv* env, jobject thiz, jstring devId) {
     const char* pDevId = env->GetStringUTFChars(devId, nullptr);
-    LOGI("[native] Enter startP2pVideo");
-    LOGI("[native] JNI setDevP2p called: %s", pDevId);
+    LOGI("[自检] >>>>>>>>>>>> Enter startP2pVideo");
+    LOGI("[自检] JNI setDevP2p called: %s", pDevId);
     SetDevP2p((char*)pDevId);
     env->ReleaseStringUTFChars(devId, pDevId);
-    LOGI("[native] JNI startP2pVideo called, will call StartP2pVideo");
+    LOGI("[自检] JNI startP2pVideo called, will call StartP2pVideo");
+    LOGI("[自检] Registering RecbVideoData callback, waiting for frames...");
     StartP2pVideo(RecbVideoData);
-    LOGI("[native] StartP2pVideo called");
+    LOGI("[自检] StartP2pVideo called");
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -345,4 +347,12 @@ Java_com_example_music_1app_1framework_MainActivity_stopP2pVideo(JNIEnv* env, jo
     LOGI("[native] JNI stopP2pVideo called");
     StopP2pVideo();
     LOGI("[native] StopP2pVideo called");
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_music_1app_1framework_MainActivity_setFlutterTextureId(JNIEnv* env, jobject thiz, jlong textureId) {
+    g_flutterTextureId = textureId;
+    __android_log_print(ANDROID_LOG_INFO, "NativeLib", "setFlutterTextureId called: %lld", (long long)textureId);
+    // TODO: 这里可以根据 textureId 获取/绑定 Surface/SurfaceTexture
 } 

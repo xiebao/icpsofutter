@@ -30,7 +30,8 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> login(String email, String password) async {
     // 本地Mock账号（开发调试用）
-    if (email == 'test@123.com' && password == '123456') {
+    if (email == 'demo' && password == '123') {
+    // if (email == 'test@123.com' && password == '123456') {
       _token = 'mock_token';
       _user = User(id: '1', name: '测试用户', email: email, avatarUrl: null);
       _isAuthenticated = true;

@@ -3,22 +3,23 @@ import 'package:flutter/services.dart';
 import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-class P2pVideoTestPage extends StatefulWidget {
-  const P2pVideoTestPage({Key? key}) : super(key: key);
+class P2pVideoMainPage extends StatefulWidget {
+  const P2pVideoMainPage({Key? key}) : super(key: key);
 
   @override
-  State<P2pVideoTestPage> createState() => _P2pVideoTestPageState();
+  State<P2pVideoMainPage> createState() => _P2pVideoMainPageState();
 }
 
-class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
+class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
   String _status = 'Idle';
   final TextEditingController _devIdController = TextEditingController(text: 'camId123');
   final TextEditingController _phoneIdController = TextEditingController(text: 'phoneId123');
   bool _videoStarted = false;
   int _decodeMode = 1; // 1:软解, 0:硬解
-  int _displayMode = 0; // 0: AndroidView, 1: Texture
+  int _displayMode = 1; // 默认使用Texture模式
   int? _textureId;
   bool _isDisposed = false;
 
@@ -26,6 +27,30 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
   void initState() {
     super.initState();
     _channel.setMethodCallHandler(_handleMethod);
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    // Request camera permission
+    var cameraStatus = await Permission.camera.request();
+    if (cameraStatus.isDenied) {
+      log('Camera permission denied');
+      return;
+    }
+
+    // Request microphone permission
+    var microphoneStatus = await Permission.microphone.request();
+    if (microphoneStatus.isDenied) {
+      log('Microphone permission denied');
+      return;
+    }
+
+    // Request storage permissions
+    var storageStatus = await Permission.storage.request();
+    if (storageStatus.isDenied) {
+      log('Storage permission denied');
+      return;
+    }
   }
 
   Future<dynamic> _handleMethod(MethodCall call) async {
@@ -35,7 +60,6 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
       case 'onTextureFrame':
         if (_textureId != null) {
           try {
-            // 通知 Flutter 引擎更新纹理
             await _channel.invokeMethod('updateTexture', {
               'textureId': _textureId,
               'width': call.arguments['width'],
@@ -60,11 +84,11 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
     if (_isDisposed) return;
     
     try {
-      log('[Flutter] 调用 initMqtt: "+_phoneIdController.text+"');
+      log('[Flutter] 调用 initMqtt: ${_phoneIdController.text}');
       await _channel.invokeMethod('initMqtt', {'phoneId': _phoneIdController.text});
       if (mounted) {
         setState(() {
-          _status = 'initMqtt called: '+_phoneIdController.text;
+          _status = 'initMqtt called: ${_phoneIdController.text}';
         });
       }
     } catch (e) {
@@ -81,13 +105,18 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
     if (_isDisposed) return;
     
     try {
-      log('[Flutter] 调用 setDevP2p: "+_devIdController.text+"');
+      log('[Flutter] 调用 setDevP2p: ${_devIdController.text}');
       await _channel.invokeMethod('setDevP2p', {'devId': _devIdController.text});
       if (mounted) {
         setState(() {
-          _status = 'setDevP2p called: '+_devIdController.text;
+          _status = 'setDevP2p called: ${_devIdController.text}';
         });
       }
+      
+      // 在setDevP2p完成后自动调用startP2pVideo
+      log('[Flutter] setDevP2p completed, starting video...');
+      await _startP2pVideo();
+      
     } catch (e) {
       log('[Flutter] setDevP2p error: $e');
       if (mounted) {
@@ -102,18 +131,15 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
     if (_isDisposed) return;
     
     try {
-      log('[Flutter] 开始启动 P2P 视频: '+_devIdController.text);
+      log('[Flutter] 调用 startP2pVideo: ${_devIdController.text}');
       if (_displayMode == 1) {
-        // Texture 模式
-        log('[Flutter] 创建 Texture');
         _textureId = await _channel.invokeMethod('createTexture');
         if (_textureId == null) {
           throw Exception('Failed to create texture');
         }
-        log('[Flutter] Texture 创建成功，ID: $_textureId');
+        log('[Flutter] Texture created with ID: $_textureId');
       }
       
-      log('[Flutter] 调用 startP2pVideo 方法');
       await _channel.invokeMethod('startP2pVideo', {
         'devId': _devIdController.text,
         'displayMode': _displayMode,
@@ -122,13 +148,11 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
       
       if (mounted) {
         setState(() {
-          _status = 'startP2pVideo called: '+_devIdController.text;
+          _status = 'startP2pVideo called: ${_devIdController.text}';
           _videoStarted = true;
         });
       }
       
-      log('[Flutter] 启动帧检查');
-      // 启动帧检查
       _startFrameCheck();
     } catch (e) {
       log('[Flutter] startP2pVideo error: $e');
@@ -137,7 +161,6 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
           _status = 'Error: $e';
         });
       }
-      // 清理资源
       await _cleanupResources();
     }
   }
@@ -192,20 +215,14 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
     if (_isDisposed) return;
     
     try {
-      log('[Flutter] 开始一键启动流程');
-      log('[Flutter] 1. 初始化 MQTT');
       await _initMqtt();
-      log('[Flutter] 2. 设置 P2P 设备');
-      _channel.invokeMethod('setDevP2p', {'devId': _devIdController.text}); // fire-and-forget
-      log('[Flutter] 3. 开始 P2P 视频');
-      await _startP2pVideo();
+      await _setDevP2p();
       if (mounted) {
         setState(() {
-          _status = 'initMqtt + setDevP2p + startP2pVideo called';
+          _status = 'initMqtt + setDevP2p called';
           _videoStarted = true;
         });
       }
-      log('[Flutter] 一键启动完成');
     } catch (e) {
       log('[Flutter] 一键启动 error: $e');
       if (mounted) {
@@ -232,31 +249,10 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
     }
   }
 
-  void _setDisplayMode(int mode) async {
-    if (_isDisposed) return;
-    
-    try {
-      if (_videoStarted) {
-        await _stopP2pVideo();
-      }
-      setState(() { _displayMode = mode; });
-      if (_videoStarted) {
-        await _startP2pVideo();
-      }
-    } catch (e) {
-      log('[Flutter] setDisplayMode error: $e');
-      if (mounted) {
-        setState(() {
-          _status = 'Error: $e';
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('P2P Video Test')),
+      appBar: AppBar(title: const Text('P2P视频流')),
       body: Center(
         child: SingleChildScrollView(
           child: ConstrainedBox(
@@ -309,17 +305,9 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
                     ToggleButtons(
                       isSelected: [_decodeMode==1, _decodeMode==0],
                       onPressed: (idx) => _setDecodeMode(idx==0?1:0),
-                      children: [
+                      children: const [
                         Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('软解(ExoPlayer)')),
                         Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('硬解(MediaCodec)')),
-                      ],
-                    ),
-                    ToggleButtons(
-                      isSelected: [_displayMode==0, _displayMode==1],
-                      onPressed: (idx) => _setDisplayMode(idx),
-                      children: [
-                        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('AndroidView')),
-                        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Texture')),
                       ],
                     ),
                   ],
@@ -330,19 +318,13 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
                   width: 320,
                   height: 240,
                   child: _videoStarted
-                      ? _displayMode == 0
-                          ? AndroidView(
-                              viewType: 'p2p_video_view',
-                              creationParams: {'decodeMode': _decodeMode},
-                              creationParamsCodec: const StandardMessageCodec(),
+                      ? _textureId != null
+                          ? Texture(textureId: _textureId!)
+                          : Container(
+                              color: Colors.black12,
+                              alignment: Alignment.center,
+                              child: const Text('Texture 初始化中...', style: TextStyle(color: Colors.grey)),
                             )
-                          : _textureId != null
-                              ? Texture(textureId: _textureId!)
-                              : Container(
-                                  color: Colors.black12,
-                                  alignment: Alignment.center,
-                                  child: const Text('Texture 初始化中...', style: TextStyle(color: Colors.grey)),
-                                )
                       : Container(
                           color: Colors.black12,
                           alignment: Alignment.center,

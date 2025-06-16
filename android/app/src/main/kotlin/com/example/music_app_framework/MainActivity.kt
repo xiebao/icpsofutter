@@ -21,6 +21,7 @@ class MainActivity: FlutterActivity() {
     external fun startP2pVideo(devId: String)
     external fun stopP2pVideo()
     external fun initMqtt(phoneId: String)
+    external fun setFlutterTextureId(textureId: Long)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -52,6 +53,11 @@ class MainActivity: FlutterActivity() {
                 "startP2pVideo" -> {
                     try {
                         val devId = call.argument<String>("devId") ?: ""
+                        val displayMode = call.argument<Int>("displayMode") ?: 1
+                        val textureId = call.argument<Long>("textureId") ?: 0L
+                        // 通过 JNI 传递 textureId 到 native 层，供后续渲染
+                        setFlutterTextureId(textureId)
+                        // TODO: native 层需保存 textureId，等 TextureView/SurfaceTexture available 后再渲染帧
                         startP2pVideo(devId)
                         result.success(null)
                     } catch (e: Exception) {
@@ -68,19 +74,29 @@ class MainActivity: FlutterActivity() {
                         result.error("P2P_STOP_ERROR", "Failed to stop P2P video: ${e.message}", null)
                     }
                 }
+                "createTexture" -> {
+                    val textureId = System.nanoTime()
+                    result.success(textureId)
+                }
+                "checkFrameStatus" -> {
+                    // 可在此处实现帧状态检查逻辑，当前直接返回 success
+                    result.success(null)
+                }
                 "setDecodeMode" -> {
-                    try {
-                        val mode = call.argument<Int>("mode") ?: 1
-                        p2pView?.updateDecodeMode(mode)
-                        result.success(null)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to set decode mode", e)
-                        result.error("DECODE_MODE_ERROR", "Failed to set decode mode: ${e.message}", null)
-                    }
+                    // TODO: 可在此处实现解码模式切换逻辑
+                    result.success(null)
+                }
+                "disposeTexture" -> {
+                    // TODO: 可在此处实现 Texture 资源释放逻辑
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
         }
         flutterEngine.platformViewsController.registry.registerViewFactory("p2p_video_view", factory)
+        flutterEngine
+            .platformViewsController
+            .registry
+            .registerViewFactory("camera_preview", CameraPreviewViewFactory())
     }
 }

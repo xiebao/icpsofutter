@@ -4,6 +4,7 @@ import '../auth/auth_provider.dart';
 import '../utils/app_routes.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'profile_page.dart';
+import 'p2p_video_main_page.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -81,6 +82,20 @@ class HomeContent extends StatelessWidget {
                 Navigator.of(context).pushNamed('/p2p_video_test');
               },
               child: Text('P2P视频测试'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/p2p_video');
+              },
+              child: Text('摄像头测试'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/p2p_video_main');
+              },
+              child: Text('P2P视频流'),
             ),
           ],
         ),

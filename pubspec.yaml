@@ -17,6 +17,8 @@ dependencies:
   shared_preferences: ^2.2.3
   cupertino_icons: ^1.0.6
   image_picker: ^1.1.2
+  camera: ^0.10.5+9
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:
