@@ -20,8 +20,12 @@ set_target_properties(
 
 target_include_directories(native-lib PRIVATE ${CMAKE_SOURCE_DIR})
 
+find_library(log-lib log)
+find_library(android-lib android)
+
 target_link_libraries(
     native-lib
+    ${log-lib}
+    ${android-lib}
     p2p
-    log
 ) 

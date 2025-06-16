@@ -202,22 +202,6 @@
 			"value" : "/Users/a0000/Library/Android/sdk/cmake/3.22.1/bin/ctest"
 		},
 		{
-			"name" : "CMAKE_CXX_COMPILER",
-			"properties" : 
-			[
-				{
-					"name" : "ADVANCED",
-					"value" : "1"
-				},
-				{
-					"name" : "HELPSTRING",
-					"value" : "(This variable does not exist and should not be used)"
-				}
-			],
-			"type" : "UNINITIALIZED",
-			"value" : ""
-		},
-		{
 			"name" : "CMAKE_CXX_COMPILER_AR",
 			"properties" : 
 			[
@@ -328,22 +312,6 @@
 			],
 			"type" : "STRING",
 			"value" : "-O2 -g -DNDEBUG"
-		},
-		{
-			"name" : "CMAKE_C_COMPILER",
-			"properties" : 
-			[
-				{
-					"name" : "ADVANCED",
-					"value" : "1"
-				},
-				{
-					"name" : "HELPSTRING",
-					"value" : "(This variable does not exist and should not be used)"
-				}
-			],
-			"type" : "UNINITIALIZED",
-			"value" : ""
 		},
 		{
 			"name" : "CMAKE_C_COMPILER_AR",
@@ -1207,10 +1175,10 @@
 			[
 				{
 					"name" : "HELPSTRING",
-					"value" : "The CMake toolchain file"
+					"value" : "No help, variable specified on the command line."
 				}
 			],
-			"type" : "FILEPATH",
+			"type" : "UNINITIALIZED",
 			"value" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/build/cmake/android.toolchain.cmake"
 		},
 		{
@@ -1242,6 +1210,30 @@
 			"value" : "FALSE"
 		},
 		{
+			"name" : "android-lib",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a library."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libandroid.so"
+		},
+		{
+			"name" : "log-lib",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a library."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/liblog.so"
+		},
+		{
 			"name" : "native-lib_LIB_DEPENDS",
 			"properties" : 
 			[
@@ -1251,7 +1243,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "general;p2p;general;log;"
+			"value" : "general;/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/liblog.so;general;/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libandroid.so;general;p2p;"
 		},
 		{
 			"name" : "native_lib_BINARY_DIR",
@@ -1288,6 +1280,18 @@
 			],
 			"type" : "STATIC",
 			"value" : "/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp"
+		},
+		{
+			"name" : "pthread-lib",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a library."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "pthread-lib-NOTFOUND"
 		}
 	],
 	"kind" : "cache",

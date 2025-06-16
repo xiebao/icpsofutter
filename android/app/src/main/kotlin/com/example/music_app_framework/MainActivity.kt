@@ -6,9 +6,12 @@ import io.flutter.plugin.common.MethodChannel
 import android.content.Context
 import io.flutter.plugin.platform.PlatformViewFactory
 import io.flutter.plugin.common.StandardMessageCodec
+import io.flutter.plugin.common.BinaryMessenger
+import android.util.Log
 
 class MainActivity: FlutterActivity() {
     companion object {
+        private const val TAG = "MainActivity"
         init {
             System.loadLibrary("native-lib")
         }
@@ -21,42 +24,59 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        initMqtt("androidPhoneId")
         var p2pView: P2pVideoView? = null
-        val factory = object : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
-            override fun create(context: android.content.Context, id: Int, args: Any?): io.flutter.plugin.platform.PlatformView {
-                val mode = (args as? Map<*, *>)?.get("decodeMode") as? Int ?: 1
-                val view = P2pVideoView(context)
-                view.setDecodeMode(mode)
-                p2pView = view
-                return view
-            }
-        }
+        val factory = P2pVideoViewFactory(flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "p2p_video_channel").setMethodCallHandler { call, result ->
             when (call.method) {
                 "initMqtt" -> {
-                    val phoneId = call.argument<String>("phoneId") ?: "phoneId123"
-                    initMqtt(phoneId)
-                    result.success(null)
+                    try {
+                        val phoneId = call.argument<String>("phoneId") ?: "phoneId123"
+                        Log.d(TAG, "Initializing MQTT with phoneId: $phoneId")
+                        initMqtt(phoneId)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "MQTT initialization failed", e)
+                        result.error("MQTT_INIT_ERROR", "MQTT initialization failed: ${e.message}", null)
+                    }
                 }
                 "setDevP2p" -> {
-                    val devId = call.argument<String>("devId") ?: ""
-                    setDevP2p(devId)
-                    result.success(null)
+                    try {
+                        val devId = call.argument<String>("devId") ?: ""
+                        setDevP2p(devId)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to set device P2P", e)
+                        result.error("P2P_SET_ERROR", "Failed to set device P2P: ${e.message}", null)
+                    }
                 }
                 "startP2pVideo" -> {
-                    val devId = call.argument<String>("devId") ?: ""
-                    startP2pVideo(devId)
-                    result.success(null)
+                    try {
+                        val devId = call.argument<String>("devId") ?: ""
+                        startP2pVideo(devId)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to start P2P video", e)
+                        result.error("P2P_START_ERROR", "Failed to start P2P video: ${e.message}", null)
+                    }
                 }
                 "stopP2pVideo" -> {
-                    stopP2pVideo()
-                    result.success(null)
+                    try {
+                        stopP2pVideo()
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to stop P2P video", e)
+                        result.error("P2P_STOP_ERROR", "Failed to stop P2P video: ${e.message}", null)
+                    }
                 }
                 "setDecodeMode" -> {
-                    val mode = call.argument<Int>("mode") ?: 1
-                    p2pView?.setDecodeMode(mode)
-                    result.success(null)
+                    try {
+                        val mode = call.argument<Int>("mode") ?: 1
+                        p2pView?.updateDecodeMode(mode)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to set decode mode", e)
+                        result.error("DECODE_MODE_ERROR", "Failed to set decode mode: ${e.message}", null)
+                    }
                 }
                 else -> result.notImplemented()
             }

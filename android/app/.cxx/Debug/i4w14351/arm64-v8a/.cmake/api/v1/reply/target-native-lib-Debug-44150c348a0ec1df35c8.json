@@ -32,7 +32,7 @@
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 23,
+				"line" : 26,
 				"parent" : 0
 			},
 			{
@@ -87,12 +87,17 @@
 			},
 			{
 				"backtrace" : 2,
-				"fragment" : "/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp/../jniLibs/arm64-v8a/libp2p.so",
+				"fragment" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/liblog.so",
 				"role" : "libraries"
 			},
 			{
 				"backtrace" : 2,
-				"fragment" : "-llog",
+				"fragment" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libandroid.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 2,
+				"fragment" : "/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp/../jniLibs/arm64-v8a/libp2p.so",
 				"role" : "libraries"
 			},
 			{
