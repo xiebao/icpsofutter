@@ -160,20 +160,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
           _status = 'Error: $e';
         });
       }
-      await _cleanupResources();
     }
-  }
-
-  Future<void> _cleanupResources() async {
-    if (_textureId != null) {
-      try {
-        await _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
-      } catch (e) {
-        log('[Flutter] disposeTexture error: $e');
-      }
-      _textureId = null;
-    }
-    _videoStarted = false;
   }
 
   Future<void> _stopP2pVideo() async {
@@ -182,11 +169,20 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     try {
       log('[Flutter] 调用 stopP2pVideo');
       await _channel.invokeMethod('stopP2pVideo');
-      await _cleanupResources();
+      
+      if (_textureId != null) {
+        try {
+          await _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
+        } catch (e) {
+          log('[Flutter] disposeTexture error: $e');
+        }
+        _textureId = null;
+      }
       
       if (mounted) {
         setState(() {
           _status = 'stopped';
+          _videoStarted = false;
         });
       }
     } catch (e) {
@@ -237,6 +233,17 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    if (_textureId != null) {
+      _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
+    }
+    _devIdController.dispose();
+    _phoneIdController.dispose();
+    super.dispose();
   }
 
   @override
@@ -327,12 +334,5 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _isDisposed = true;
-    _cleanupResources();
-    super.dispose();
   }
 } 

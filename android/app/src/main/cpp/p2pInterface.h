@@ -1,5 +1,74 @@
-#ifndef P2P_INTERFACE_H   
+#ifndef P2P_INTERFACE_H
 #define P2P_INTERFACE_H
+
+#include <string>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <atomic>
+
+class P2PInterface {
+public:
+    static P2PInterface& getInstance() {
+        static P2PInterface instance;
+        return instance;
+    }
+
+    bool initialize(const std::string& deviceId) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (initialized_) {
+            return true;
+        }
+        
+        deviceId_ = deviceId;
+        initialized_ = true;
+        return true;
+    }
+
+    bool startVideo() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!initialized_) {
+            return false;
+        }
+        
+        if (isRunning_) {
+            return true;
+        }
+        
+        isRunning_ = true;
+        return true;
+    }
+
+    bool stopVideo() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!initialized_ || !isRunning_) {
+            return true;
+        }
+        
+        isRunning_ = false;
+        return true;
+    }
+
+    void cleanup() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (isRunning_) {
+            stopVideo();
+        }
+        initialized_ = false;
+        deviceId_.clear();
+    }
+
+private:
+    P2PInterface() = default;
+    ~P2PInterface() = default;
+    P2PInterface(const P2PInterface&) = delete;
+    P2PInterface& operator=(const P2PInterface&) = delete;
+
+    std::mutex mutex_;
+    std::atomic<bool> initialized_{false};
+    std::atomic<bool> isRunning_{false};
+    std::string deviceId_;
+};
 
 typedef  void (*pFunRecvCB)(void* ,int );
 
@@ -14,8 +83,8 @@ void SetDevP2p( char* pDevId);
 //pJsonMsg，消息数据，json格式的数据，不是字符串
 // 如：
 // {
-//     “type”:”login”,
-//     “data”:”...”
+//     "type":"login",
+//     "data":"..."
 // }
 //mqtt主题，设备的id号，如：/yyt/pDevId/msg
 //功能：给设备发送消息,消息格式为json格式
