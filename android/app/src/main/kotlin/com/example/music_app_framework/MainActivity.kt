@@ -27,7 +27,9 @@ class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         var p2pView: P2pVideoView? = null
-        val factory = P2pVideoViewFactory(flutterEngine.dartExecutor.binaryMessenger)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        p2pView = P2pVideoView(this, MethodChannel(messenger, "p2p_video_view_manual"), 0, null)
+        val factory = P2pVideoViewFactory(messenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "p2p_video_channel").setMethodCallHandler { call, result ->
             when (call.method) {
                 "initMqtt" -> {
@@ -54,21 +56,9 @@ class MainActivity: FlutterActivity() {
                 }
                 "startP2pVideo" -> {
                     try {
-                        val devId = call.argument<String>("devId") ?: ""
-                        val displayMode = call.argument<Int>("displayMode") ?: 1
-                        val textureId = call.argument<Long>("textureId") ?: 0L
-                        
-                        // 检查P2P连接状态
-                        val p2pStatus = getP2pStatus()
-                        Log.d(TAG, "P2P connection status: $p2pStatus")
-                        if (p2pStatus != 1) {
-                            result.error("P2P_NOT_CONNECTED", "P2P connection not established", null)
-                            return@setMethodCallHandler
-                        }
-                        
-                        // 通过 JNI 传递 textureId 到 native 层，供后续渲染
-                        setFlutterTextureId(textureId)
-                        startP2pVideo(devId)
+                        Log.d(TAG, "MainActivity 通过 p2pView 调用 callStartP2pVideoWithLog() (无参数)")
+                        p2pView?.callStartP2pVideoWithLog()
+                        Log.d(TAG, "MainActivity 调用 p2pView.callStartP2pVideoWithLog() (无参数) 后")
                         result.success(null)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to start P2P video", e)

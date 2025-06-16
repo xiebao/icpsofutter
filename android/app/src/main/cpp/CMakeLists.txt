@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.4.1)
 project(native_lib)
 
+# 添加 MediaCodec 库
+find_library(mediandk-lib mediandk)
+
 add_library(
     native-lib
     SHARED
@@ -28,4 +31,7 @@ target_link_libraries(
     ${log-lib}
     ${android-lib}
     p2p
+    ${mediandk-lib}
+    GLESv2
+    EGL
 ) 

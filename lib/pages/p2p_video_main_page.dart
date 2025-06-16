@@ -4,6 +4,7 @@ import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:async';
 
 class P2pVideoMainPage extends StatefulWidget {
   const P2pVideoMainPage({Key? key}) : super(key: key);
@@ -18,16 +19,39 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   final TextEditingController _devIdController = TextEditingController(text: 'camId123');
   final TextEditingController _phoneIdController = TextEditingController(text: 'phoneId123');
   bool _videoStarted = false;
-  int _decodeMode = 1; // 1:软解, 0:硬解
+  bool _videoStreamAvailable = false;  // 视频流状态
+  int _decodeMode = 0; // 默认使用硬解(MediaCodec)
   int _displayMode = 1; // 默认使用Texture模式
   int? _textureId;
   bool _isDisposed = false;
+  DateTime? _lastFrameTime;  // 最后收到视频帧的时间
+  bool _isHardwareDecodingFailed = false;  // 硬解是否失败
 
   @override
   void initState() {
     super.initState();
     _channel.setMethodCallHandler(_handleMethod);
     _requestPermissions();
+    
+    // 添加定时器检查视频流状态
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isDisposed) {
+        timer.cancel();
+        return;
+      }
+      
+      if (_videoStarted && _lastFrameTime != null) {
+        final now = DateTime.now();
+        final diff = now.difference(_lastFrameTime!);
+        if (diff.inSeconds > 2) {  // 如果超过2秒没有收到新帧，认为视频流断开
+          if (mounted) {
+            setState(() {
+              _videoStreamAvailable = false;
+            });
+          }
+        }
+      }
+    });
   }
 
   Future<void> _requestPermissions() async {
@@ -60,11 +84,28 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       case 'onTextureFrame':
         if (_textureId != null) {
           try {
+            // 获取视频帧数据
+            final yuvData = call.arguments['yuvData'] as List<int>;
+            final width = call.arguments['width'] as int;
+            final height = call.arguments['height'] as int;
+            
+            // 更新视频流状态
+            if (mounted) {
+              setState(() {
+                _videoStreamAvailable = true;
+                _lastFrameTime = DateTime.now();
+              });
+            }
+            
+            // 通知Texture更新
             await _channel.invokeMethod('updateTexture', {
               'textureId': _textureId,
-              'width': call.arguments['width'],
-              'height': call.arguments['height'],
+              'yuvData': yuvData,
+              'width': width,
+              'height': height,
             });
+            
+            log('[Flutter] Received video frame: ${width}x${height}, data size: ${yuvData.length}');
           } catch (e) {
             log('[Flutter] updateTexture error: $e');
           }
@@ -72,9 +113,19 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         break;
       case 'onError':
         if (mounted) {
+          final errorMsg = call.arguments['message'] as String;
           setState(() {
-            _status = 'Error: ${call.arguments['message']}';
+            _status = 'Error: $errorMsg';
+            _videoStreamAvailable = false;
           });
+          
+          // 检查是否是硬解错误
+          if (errorMsg.contains("MediaCodec") && _decodeMode == 0) {
+            _isHardwareDecodingFailed = true;
+            log('[Flutter] 硬解失败，切换到软解模式');
+            // 自动重启视频流
+            _stopP2pVideo().then((_) => _startP2pVideo());
+          }
         }
         break;
     }
@@ -129,6 +180,12 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       log('[Flutter] 开始启动 P2P 视频: ${_devIdController.text}');
       log('[Flutter] 调用 startP2pVideo 方法');
       
+      // 如果硬解失败过，使用软解
+      if (_isHardwareDecodingFailed) {
+        _decodeMode = 1;
+        log('[Flutter] 使用软解模式（硬解失败）');
+      }
+      
       if (_displayMode == 1) {
         log('[Flutter] 创建 Texture');
         _textureId = await _channel.invokeMethod('createTexture');
@@ -143,12 +200,15 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         'devId': _devIdController.text,
         'displayMode': _displayMode,
         'textureId': _textureId,
+        'decodeMode': _decodeMode,
       });
       
       if (mounted) {
         setState(() {
           _status = 'startP2pVideo called: ${_devIdController.text}';
           _videoStarted = true;
+          _videoStreamAvailable = false;  // 开始时设置为false，等待第一帧
+          _lastFrameTime = null;  // 清除最后帧时间
         });
       }
       
@@ -158,6 +218,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       if (mounted) {
         setState(() {
           _status = 'Error: $e';
+          _videoStreamAvailable = false;
         });
       }
     }
@@ -183,6 +244,8 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         setState(() {
           _status = 'stopped';
           _videoStarted = false;
+          _videoStreamAvailable = false;  // 停止时重置视频流状态
+          _lastFrameTime = null;  // 清除最后帧时间
         });
       }
     } catch (e) {
@@ -302,15 +365,24 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                     ToggleButtons(
                       isSelected: [_decodeMode==1, _decodeMode==0],
                       onPressed: (idx) => _setDecodeMode(idx==0?1:0),
-                      children: const [
-                        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('软解(ExoPlayer)')),
-                        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('硬解(MediaCodec)')),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('软解(ExoPlayer)${_isHardwareDecodingFailed ? " (当前)" : ""}'),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('硬解(MediaCodec)${!_isHardwareDecodingFailed ? " (当前)" : ""}'),
+                        ),
                       ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-                const Text('视频流显示区：'),
+                Row(children: [
+                  const Text('视频流显示区：'),
+                  _videoStreamAvailable ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
+                ],),
                 SizedBox(
                   width: 320,
                   height: 240,

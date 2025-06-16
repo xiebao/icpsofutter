@@ -40,6 +40,8 @@ import android.graphics.ImageFormat
 import android.media.Image
 import android.renderscript.*
 import java.nio.ByteOrder
+import android.graphics.Bitmap
+import android.opengl.GLES20
 
 class P2pVideoViewFactory(private val messenger: BinaryMessenger) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, id: Int, args: Any?): PlatformView {
@@ -80,7 +82,25 @@ class P2pVideoView(
     private var textureHeight: Int = 0
     private var matrix: Matrix = Matrix()
 
+    companion object {
+        private var instance: P2pVideoView? = null
+        
+        @JvmStatic
+        fun onTextureFrame(width: Int, height: Int, yuvData: ByteArray) {
+            instance?.let { view ->
+                if (!view.isDisposed.get()) {
+                    view.messenger.invokeMethod("onTextureFrame", mapOf(
+                        "width" to width,
+                        "height" to height,
+                        "yuvData" to yuvData
+                    ))
+                }
+            }
+        }
+    }
+
     init {
+        instance = this
         frameLayout = FrameLayout(context)
         surfaceView = SurfaceView(context)
         textureView = TextureView(context)
@@ -238,6 +258,7 @@ class P2pVideoView(
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 30)
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            format.setInteger(MediaFormat.KEY_COMPLEXITY, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
             
             Log.d(TAG, "Creating MediaCodec decoder")
             mediaCodec = MediaCodec.createDecoderByType(mimeType)
@@ -245,6 +266,9 @@ class P2pVideoView(
             mediaCodec?.configure(format, surfaceTexture?.let { Surface(it) }, null, 0)
             Log.d(TAG, "Starting MediaCodec")
             mediaCodec?.start()
+            
+            // 启动帧处理线程
+            startFrameProcessing()
             
             Log.d(TAG, "MediaCodec initialized successfully")
         } catch (e: Exception) {
@@ -269,50 +293,26 @@ class P2pVideoView(
         }
         
         try {
-            Log.d(TAG, "Processing frame for texture, size=${frame.remaining()}")
             val inputBufferId = mediaCodec?.dequeueInputBuffer(10000) ?: -1
             if (inputBufferId >= 0) {
-                Log.d(TAG, "Got input buffer $inputBufferId")
                 val inputBuffer = mediaCodec?.getInputBuffer(inputBufferId)
                 inputBuffer?.clear()
                 inputBuffer?.put(frame)
                 mediaCodec?.queueInputBuffer(inputBufferId, 0, frame.remaining(), System.nanoTime() / 1000, 0)
-                Log.d(TAG, "Queued input buffer $inputBufferId")
-            } else {
-                Log.w(TAG, "No input buffer available")
             }
 
             val bufferInfo = MediaCodec.BufferInfo()
             val outputBufferId = mediaCodec?.dequeueOutputBuffer(bufferInfo, 10000) ?: -1
             
-            when (outputBufferId) {
-                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    Log.d(TAG, "Output format changed: ${mediaCodec?.outputFormat}")
-                }
-                MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                    Log.d(TAG, "No output buffer available")
-                }
-                else -> {
-                    if (outputBufferId >= 0) {
-                        Log.d(TAG, "Got output buffer $outputBufferId")
-                        surfaceTexture?.updateTexImage()
-                        Log.d(TAG, "Updated texture image")
-                        
-                        messenger.invokeMethod("onTextureFrame", mapOf(
-                            "textureId" to textureId,
-                            "width" to textureWidth,
-                            "height" to textureHeight
-                        ))
-                        Log.d(TAG, "Notified Flutter about texture update")
-                        
-                        mediaCodec?.releaseOutputBuffer(outputBufferId, true)
-                        Log.d(TAG, "Released output buffer $outputBufferId")
-                    }
-                }
+            if (outputBufferId >= 0) {
+                mediaCodec?.releaseOutputBuffer(outputBufferId, true)
+            } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                val newFormat = mediaCodec?.outputFormat
+                Log.d(TAG, "Output format changed: $newFormat")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing frame for texture", e)
-            messenger.invokeMethod("onError", mapOf("message" to "Frame processing error: ${e.message}"))
+            messenger.invokeMethod("onError", mapOf("message" to "Error processing frame: ${e.message}"))
         }
     }
 
@@ -326,61 +326,23 @@ class P2pVideoView(
     }
 
     private fun startFrameProcessing() {
-        if (isProcessingFrames.get()) {
-            Log.d(TAG, "Frame processing already started")
-            return
-        }
-
+        if (isProcessingFrames.get()) return
+        
         isProcessingFrames.set(true)
         Thread {
-            Log.d(TAG, "Frame processing thread started")
-            var consecutiveErrors = 0
-            val maxConsecutiveErrors = 5
-            
             while (!isDisposed.get() && isProcessingFrames.get()) {
                 try {
                     val frame = frameQueue.poll(100, TimeUnit.MILLISECONDS)
                     if (frame != null) {
-                        Log.d(TAG, "Processing frame from queue: size=${frame.remaining()}")
                         processFrame(frame)
                         frameCount.incrementAndGet()
                         lastFrameTime = System.currentTimeMillis()
-                        consecutiveErrors = 0 // 成功处理帧，重置错误计数
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error in frame processing thread", e)
+                    Log.e(TAG, "Error processing frame", e)
                     errorCount.incrementAndGet()
-                    consecutiveErrors++
-                    
-                    if (consecutiveErrors >= maxConsecutiveErrors) {
-                        Log.e(TAG, "Too many consecutive errors ($consecutiveErrors), attempting to recover...")
-                        messenger.invokeMethod("onError", mapOf("message" to "Too many consecutive errors, attempting to recover"))
-                        
-                        // 尝试恢复
-                        try {
-                            mediaCodec?.stop()
-                            mediaCodec?.release()
-                            mediaCodec = null
-                            Thread.sleep(1000) // 等待1秒
-                            if (surfaceTexture != null) {
-                                if (textureWidth > 0 && textureHeight > 0) {
-                                    initMediaCodec(textureWidth, textureHeight)
-                                } else {
-                                    initMediaCodec(640, 480)
-                                }
-                            } else {
-                                initMediaCodec(640, 480)
-                            }
-                            consecutiveErrors = 0
-                        } catch (recoveryError: Exception) {
-                            Log.e(TAG, "Recovery failed", recoveryError)
-                            messenger.invokeMethod("onError", mapOf("message" to "Recovery failed: ${recoveryError.message}"))
-                            break // 恢复失败，退出处理线程
-                        }
-                    }
                 }
             }
-            Log.d(TAG, "Frame processing thread stopped")
         }.start()
     }
 
@@ -416,6 +378,7 @@ class P2pVideoView(
     }
 
     override fun dispose() {
+        instance = null
         isDisposed.set(true)
         stopFrameCheck()
         isProcessingFrames.set(false)
@@ -457,4 +420,54 @@ class P2pVideoView(
             messenger.invokeMethod("onError", mapOf("message" to "Too many errors, stopping video"))
         }
     }
+
+    private fun updateTextureInternal(data: ByteArray, width: Int, height: Int) {
+        Log.d(TAG, "updateTextureInternal: width=$width, height=$height, data size=${data.size}")
+        
+        if (data.isEmpty()) {
+            Log.e(TAG, "updateTextureInternal: Empty data received")
+            return
+        }
+
+        if (width <= 0 || height <= 0) {
+            Log.e(TAG, "updateTextureInternal: Invalid dimensions - width=$width, height=$height")
+            return
+        }
+
+        if (textureId == 0L) {
+            Log.e(TAG, "updateTextureInternal: Texture not initialized")
+            return
+        }
+
+        try {
+            // 更新纹理数据
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId.toInt())
+            GLES20.glTexImage2D(
+                GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
+                width, height, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE,
+                ByteBuffer.wrap(data)
+            )
+            
+            // 检查OpenGL错误
+            val error = GLES20.glGetError()
+            if (error != GLES20.GL_NO_ERROR) {
+                Log.e(TAG, "updateTextureInternal: OpenGL error: $error")
+            } else {
+                Log.d(TAG, "updateTextureInternal: Texture updated successfully")
+            }
+            
+            // 请求重绘
+            textureView.postInvalidate()
+        } catch (e: Exception) {
+            Log.e(TAG, "updateTextureInternal: Error updating texture", e)
+        }
+    }
+
+    fun callStartP2pVideoWithLog() {
+        Log.d(TAG, "P2pVideoView: 调用前 external fun startP2pVideo()")
+        startP2pVideo()
+        Log.d(TAG, "P2pVideoView: 调用后 external fun startP2pVideo()")
+    }
+
+    external fun startP2pVideo()
 } 
