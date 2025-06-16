@@ -108,13 +108,13 @@ static void RecbVideoData(void* data, int length) {
     LOGI("[自检] >>>>>>>>>>>> RecbVideoData called! length: %d", length);
     
     if (g_isDisposed || !g_vm || !g_p2pVideoView) {
-        LOGE("RecbVideoData: Invalid state - disposed: %d, vm: %p, view: %p", 
+        LOGE("[自检] RecbVideoData: Invalid state - disposed: %d, vm: %p, view: %p", 
              g_isDisposed.load(), g_vm, g_p2pVideoView);
         return;
     }
 
     if (!data || length <= 0) {
-        LOGE("Invalid video data received");
+        LOGE("[自检] Invalid video data received");
         notifyError("Invalid video data received");
         return;
     }
@@ -125,30 +125,30 @@ static void RecbVideoData(void* data, int length) {
     for(int i = 0; i < 16 && i < length; i++) {
         sprintf(hex + (i*2), "%02x", bytes[i]);
     }
-    LOGI("First 16 bytes of video data: %s", hex);
+    LOGI("[自检] First 16 bytes of video data: %s", hex);
 
     // 检查是否是H.264 NALU起始码
     if (length >= 4 && bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0x00 && bytes[3] == 0x01) {
-        LOGI("Found H.264 NALU start code");
+        LOGI("[自检] Found H.264 NALU start code");
         // 检查NALU类型
         if (length >= 5) {
             int naluType = bytes[4] & 0x1F;
-            LOGI("NALU type: %d", naluType);
+            LOGI("[自检] NALU type: %d", naluType);
             switch (naluType) {
                 case 1:
-                    LOGI("NALU type: Non-IDR slice");
+                    LOGI("[自检] NALU type: Non-IDR slice");
                     break;
                 case 5:
-                    LOGI("NALU type: IDR slice");
+                    LOGI("[自检] NALU type: IDR slice");
                     break;
                 case 7:
-                    LOGI("NALU type: SPS");
+                    LOGI("[自检] NALU type: SPS");
                     break;
                 case 8:
-                    LOGI("NALU type: PPS");
+                    LOGI("[自检] NALU type: PPS");
                     break;
                 default:
-                    LOGI("NALU type: Other (%d)", naluType);
+                    LOGI("[自检] NALU type: Other (%d)", naluType);
                     break;
             }
         }
@@ -156,56 +156,52 @@ static void RecbVideoData(void* data, int length) {
 
     JNIEnv* env;
     if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
-        LOGE("Failed to attach thread");
+        LOGE("[自检] Failed to attach thread");
         return;
     }
 
     try {
         if (g_isTextureMode) {
-            LOGI("Processing video frame in Texture mode");
+            LOGI("[自检] Processing video frame in Texture mode");
             // Texture 模式
             if (g_onTextureFrameMethod && g_textureId.load() != 0) {
                 jbyteArray jData = env->NewByteArray(length);
                 if (!jData) {
-                    LOGE("Failed to create byte array");
+                    LOGE("[自检] Failed to create byte array");
                     return;
                 }
                 env->SetByteArrayRegion(jData, 0, length, reinterpret_cast<const jbyte*>(data));
                 env->CallVoidMethod(g_p2pVideoView, g_onTextureFrameMethod, 
                     g_textureId.load(), jData, length);
                 env->DeleteLocalRef(jData);
-                LOGI("Texture frame processed with data length: %d", length);
+                LOGI("[自检] Texture frame processed with data length: %d", length);
             } else {
-                LOGE("Texture mode but method or ID invalid - method: %p, id: %ld", 
+                LOGE("[自检] Texture mode but method or ID invalid - method: %p, id: %ld", 
                      g_onTextureFrameMethod, g_textureId.load());
             }
         } else {
-            LOGI("Processing video frame in AndroidView mode");
+            LOGI("[自检] Processing video frame in AndroidView mode");
             // AndroidView 模式
             if (g_onVideoFrameMethod) {
                 jbyteArray jData = env->NewByteArray(length);
                 if (!jData) {
-                    LOGE("Failed to create byte array");
+                    LOGE("[自检] Failed to create byte array");
                     return;
                 }
                 env->SetByteArrayRegion(jData, 0, length, reinterpret_cast<const jbyte*>(data));
                 env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, jData);
                 env->DeleteLocalRef(jData);
-                LOGI("AndroidView frame processed");
+                LOGI("[自检] AndroidView frame processed");
             } else {
-                LOGE("AndroidView mode but method invalid");
+                LOGE("[自检] AndroidView mode but method invalid");
             }
         }
         g_frameCount++;
-        LOGI("Frame processed successfully, total frames: %d", g_frameCount.load());
+        LOGI("[自检] Frame processed successfully, total frames: %d", g_frameCount.load());
     } catch (const std::exception& e) {
         g_errorCount++;
-        LOGE("Exception in video data callback: %s", e.what());
+        LOGE("[自检] Exception in video data callback: %s", e.what());
         notifyError(e.what());
-    } catch (...) {
-        g_errorCount++;
-        LOGE("Unknown exception in video data callback");
-        notifyError("Unknown exception in video data callback");
     }
 
     g_vm->DetachCurrentThread();
@@ -334,12 +330,22 @@ Java_com_example_music_1app_1framework_MainActivity_startP2pVideo(JNIEnv* env, j
     const char* pDevId = env->GetStringUTFChars(devId, nullptr);
     LOGI("[自检] >>>>>>>>>>>> Enter startP2pVideo");
     LOGI("[自检] JNI setDevP2p called: %s", pDevId);
+    
     SetDevP2p((char*)pDevId);
     env->ReleaseStringUTFChars(devId, pDevId);
+    
     LOGI("[自检] JNI startP2pVideo called, will call StartP2pVideo");
     LOGI("[自检] Registering RecbVideoData callback, waiting for frames...");
+    
+    // 检查回调函数指针
+    if (!RecbVideoData) {
+        LOGE("[自检] RecbVideoData callback is null!");
+        return;
+    }
+    
+    LOGI("[自检] About to call StartP2pVideo with callback: %p", (void*)RecbVideoData);
     StartP2pVideo(RecbVideoData);
-    LOGI("[自检] StartP2pVideo called");
+    LOGI("[自检] StartP2pVideo called, waiting for video data...");
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -355,4 +361,59 @@ Java_com_example_music_1app_1framework_MainActivity_setFlutterTextureId(JNIEnv* 
     g_flutterTextureId = textureId;
     __android_log_print(ANDROID_LOG_INFO, "NativeLib", "setFlutterTextureId called: %lld", (long long)textureId);
     // TODO: 这里可以根据 textureId 获取/绑定 Surface/SurfaceTexture
+}
+
+// 添加P2P连接状态检查函数
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_music_1app_1framework_MainActivity_getP2pStatus(JNIEnv* env, jobject thiz) {
+    LOGI("[自检] Checking P2P connection status...");
+    // 这里应该调用实际的P2P状态检查函数
+    // 临时返回1表示已连接
+    return 1;
+}
+
+// 添加测试函数
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_music_1app_1framework_P2pTestActivity_testInitMqtt(JNIEnv* env, jobject thiz, jstring phoneId) {
+    const char* pPhoneId = env->GetStringUTFChars(phoneId, nullptr);
+    LOGI("[测试] 调用InitMqtt: %s", pPhoneId);
+    
+    InitMqtt((char*)pPhoneId, RecbMsgData);
+    env->ReleaseStringUTFChars(phoneId, pPhoneId);
+    
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_music_1app_1framework_P2pTestActivity_testSetDevP2p(JNIEnv* env, jobject thiz, jstring devId) {
+    const char* pDevId = env->GetStringUTFChars(devId, nullptr);
+    LOGI("[测试] 调用SetDevP2p: %s", pDevId);
+    
+    SetDevP2p((char*)pDevId);
+    env->ReleaseStringUTFChars(devId, pDevId);
+    
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_music_1app_1framework_P2pTestActivity_testStartP2pVideo(JNIEnv* env, jobject thiz) {
+    LOGI("[测试] 调用StartP2pVideo");
+    LOGI("[测试] 注册RecbVideoData回调");
+    
+    if (!RecbVideoData) {
+        LOGE("[测试] RecbVideoData回调为空");
+        return JNI_FALSE;
+    }
+    
+    StartP2pVideo(RecbVideoData);
+    LOGI("[测试] StartP2pVideo调用完成");
+    
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_music_1app_1framework_P2pTestActivity_testStopP2pVideo(JNIEnv* env, jobject thiz) {
+    LOGI("[测试] 调用StopP2pVideo");
+    StopP2pVideo();
+    return JNI_TRUE;
 } 

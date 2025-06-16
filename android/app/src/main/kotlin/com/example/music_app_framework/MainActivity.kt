@@ -8,22 +8,23 @@ import io.flutter.plugin.platform.PlatformViewFactory
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.common.BinaryMessenger
 import android.util.Log
+import androidx.annotation.NonNull
 
 class MainActivity: FlutterActivity() {
-    companion object {
-        private const val TAG = "MainActivity"
-        init {
-            System.loadLibrary("native-lib")
-        }
+    private val TAG = "MainActivity"
+    
+    init {
+        System.loadLibrary("native-lib")
     }
 
-    external fun setDevP2p(devId: String)
-    external fun startP2pVideo(devId: String)
-    external fun stopP2pVideo()
-    external fun initMqtt(phoneId: String)
-    external fun setFlutterTextureId(textureId: Long)
+    private external fun initMqtt(phoneId: String)
+    private external fun setDevP2p(devId: String)
+    private external fun startP2pVideo(devId: String)
+    private external fun stopP2pVideo()
+    private external fun setFlutterTextureId(textureId: Long)
+    private external fun getP2pStatus(): Int
 
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         var p2pView: P2pVideoView? = null
         val factory = P2pVideoViewFactory(flutterEngine.dartExecutor.binaryMessenger)
@@ -31,18 +32,19 @@ class MainActivity: FlutterActivity() {
             when (call.method) {
                 "initMqtt" -> {
                     try {
-                        val phoneId = call.argument<String>("phoneId") ?: "phoneId123"
+                        val phoneId = call.argument<String>("phoneId") ?: ""
                         Log.d(TAG, "Initializing MQTT with phoneId: $phoneId")
                         initMqtt(phoneId)
                         result.success(null)
                     } catch (e: Exception) {
-                        Log.e(TAG, "MQTT initialization failed", e)
-                        result.error("MQTT_INIT_ERROR", "MQTT initialization failed: ${e.message}", null)
+                        Log.e(TAG, "Failed to initialize MQTT", e)
+                        result.error("MQTT_INIT_ERROR", "Failed to initialize MQTT: ${e.message}", null)
                     }
                 }
                 "setDevP2p" -> {
                     try {
                         val devId = call.argument<String>("devId") ?: ""
+                        Log.d(TAG, "Setting device P2P: $devId")
                         setDevP2p(devId)
                         result.success(null)
                     } catch (e: Exception) {
@@ -55,9 +57,17 @@ class MainActivity: FlutterActivity() {
                         val devId = call.argument<String>("devId") ?: ""
                         val displayMode = call.argument<Int>("displayMode") ?: 1
                         val textureId = call.argument<Long>("textureId") ?: 0L
+                        
+                        // 检查P2P连接状态
+                        val p2pStatus = getP2pStatus()
+                        Log.d(TAG, "P2P connection status: $p2pStatus")
+                        if (p2pStatus != 1) {
+                            result.error("P2P_NOT_CONNECTED", "P2P connection not established", null)
+                            return@setMethodCallHandler
+                        }
+                        
                         // 通过 JNI 传递 textureId 到 native 层，供后续渲染
                         setFlutterTextureId(textureId)
-                        // TODO: native 层需保存 textureId，等 TextureView/SurfaceTexture available 后再渲染帧
                         startP2pVideo(devId)
                         result.success(null)
                     } catch (e: Exception) {

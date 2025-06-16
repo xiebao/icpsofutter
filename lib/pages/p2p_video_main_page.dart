@@ -112,11 +112,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
           _status = 'setDevP2p called: ${_devIdController.text}';
         });
       }
-      
-      // 在setDevP2p完成后自动调用startP2pVideo
-      log('[Flutter] setDevP2p completed, starting video...');
-      await _startP2pVideo();
-      
     } catch (e) {
       log('[Flutter] setDevP2p error: $e');
       if (mounted) {
@@ -131,15 +126,19 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     if (_isDisposed) return;
     
     try {
-      log('[Flutter] 调用 startP2pVideo: ${_devIdController.text}');
+      log('[Flutter] 开始启动 P2P 视频: ${_devIdController.text}');
+      log('[Flutter] 调用 startP2pVideo 方法');
+      
       if (_displayMode == 1) {
+        log('[Flutter] 创建 Texture');
         _textureId = await _channel.invokeMethod('createTexture');
         if (_textureId == null) {
           throw Exception('Failed to create texture');
         }
-        log('[Flutter] Texture created with ID: $_textureId');
+        log('[Flutter] Texture 创建成功，ID: $_textureId');
       }
       
+      log('[Flutter] 调用原生 startP2pVideo，等待 RecbVideoData 回调...');
       await _channel.invokeMethod('startP2pVideo', {
         'devId': _devIdController.text,
         'displayMode': _displayMode,
@@ -153,7 +152,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         });
       }
       
-      _startFrameCheck();
+      log('[Flutter] 一键启动完成，等待视频数据...');
     } catch (e) {
       log('[Flutter] startP2pVideo error: $e');
       if (mounted) {
@@ -175,17 +174,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       _textureId = null;
     }
     _videoStarted = false;
-  }
-
-  void _startFrameCheck() {
-    if (!_isDisposed) {
-      Future.delayed(const Duration(seconds: 3), () {
-        if (!_isDisposed && mounted) {
-          _channel.invokeMethod('checkFrameStatus');
-          _startFrameCheck();
-        }
-      });
-    }
   }
 
   Future<void> _stopP2pVideo() async {
@@ -215,11 +203,13 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     if (_isDisposed) return;
     
     try {
+      log('[Flutter] 一键启动开始');
       await _initMqtt();
       await _setDevP2p();
+      await _startP2pVideo();
       if (mounted) {
         setState(() {
-          _status = 'initMqtt + setDevP2p called';
+          _status = '一键启动完成';
           _videoStarted = true;
         });
       }

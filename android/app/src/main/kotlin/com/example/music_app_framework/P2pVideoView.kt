@@ -231,6 +231,7 @@ class P2pVideoView(
 
     private fun initMediaCodec(width: Int, height: Int) {
         try {
+            Log.d(TAG, "Initializing MediaCodec with width=$width, height=$height")
             val mimeType = "video/avc"
             val format = MediaFormat.createVideoFormat(mimeType, width, height)
             format.setInteger(MediaFormat.KEY_BIT_RATE, 2000000)
@@ -238,13 +239,17 @@ class P2pVideoView(
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             
+            Log.d(TAG, "Creating MediaCodec decoder")
             mediaCodec = MediaCodec.createDecoderByType(mimeType)
+            Log.d(TAG, "Configuring MediaCodec")
             mediaCodec?.configure(format, surfaceTexture?.let { Surface(it) }, null, 0)
+            Log.d(TAG, "Starting MediaCodec")
             mediaCodec?.start()
             
             Log.d(TAG, "MediaCodec initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing MediaCodec", e)
+            messenger.invokeMethod("onError", mapOf("message" to "MediaCodec initialization failed: ${e.message}"))
         }
     }
 
@@ -258,15 +263,23 @@ class P2pVideoView(
     }
 
     private fun processFrameForTexture(frame: ByteBuffer) {
-        if (surfaceTexture == null || textureId == 0L || mediaCodec == null) return
+        if (surfaceTexture == null || textureId == 0L || mediaCodec == null) {
+            Log.e(TAG, "Cannot process frame: surfaceTexture=${surfaceTexture != null}, textureId=$textureId, mediaCodec=${mediaCodec != null}")
+            return
+        }
         
         try {
+            Log.d(TAG, "Processing frame for texture, size=${frame.remaining()}")
             val inputBufferId = mediaCodec?.dequeueInputBuffer(10000) ?: -1
             if (inputBufferId >= 0) {
+                Log.d(TAG, "Got input buffer $inputBufferId")
                 val inputBuffer = mediaCodec?.getInputBuffer(inputBufferId)
                 inputBuffer?.clear()
                 inputBuffer?.put(frame)
                 mediaCodec?.queueInputBuffer(inputBufferId, 0, frame.remaining(), System.nanoTime() / 1000, 0)
+                Log.d(TAG, "Queued input buffer $inputBufferId")
+            } else {
+                Log.w(TAG, "No input buffer available")
             }
 
             val bufferInfo = MediaCodec.BufferInfo()
@@ -277,26 +290,29 @@ class P2pVideoView(
                     Log.d(TAG, "Output format changed: ${mediaCodec?.outputFormat}")
                 }
                 MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                    // 没有可用的输出
+                    Log.d(TAG, "No output buffer available")
                 }
                 else -> {
                     if (outputBufferId >= 0) {
-                        // 更新SurfaceTexture
+                        Log.d(TAG, "Got output buffer $outputBufferId")
                         surfaceTexture?.updateTexImage()
+                        Log.d(TAG, "Updated texture image")
                         
-                        // 通知Flutter引擎更新纹理
                         messenger.invokeMethod("onTextureFrame", mapOf(
                             "textureId" to textureId,
                             "width" to textureWidth,
                             "height" to textureHeight
                         ))
+                        Log.d(TAG, "Notified Flutter about texture update")
                         
                         mediaCodec?.releaseOutputBuffer(outputBufferId, true)
+                        Log.d(TAG, "Released output buffer $outputBufferId")
                     }
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing frame for texture", e)
+            messenger.invokeMethod("onError", mapOf("message" to "Frame processing error: ${e.message}"))
         }
     }
 
