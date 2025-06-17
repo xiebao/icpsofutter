@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 class P2pVideoTestPage extends StatefulWidget {
   const P2pVideoTestPage({Key? key}) : super(key: key);
@@ -13,43 +14,162 @@ class P2pVideoTestPage extends StatefulWidget {
 
 class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
+  static const MethodChannel _videoChannel = MethodChannel('p2p_video_channel');
   String _status = 'Idle';
   final TextEditingController _devIdController = TextEditingController(text: 'camId123');
   final TextEditingController _phoneIdController = TextEditingController(text: 'phoneId123');
   bool _videoStarted = false;
+  bool _videoStreamAvailable = false;
   int _decodeMode = 1; // 1:软解, 0:硬解
-  int _displayMode = 0; // 0: AndroidView, 1: Texture
+  int _displayMode = 1; // 使用Texture模式
   int? _textureId;
   bool _isDisposed = false;
+  DateTime? _lastFrameTime;
+  bool _decoderInitialized = false;
+  String _decoderSource = '';
+  String _statusDetail = '';
 
   @override
   void initState() {
     super.initState();
     _channel.setMethodCallHandler(_handleMethod);
+    
+    // 添加定时器检查视频流状态
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isDisposed) {
+        timer.cancel();
+        return;
+      }
+      
+      if (_videoStarted && _lastFrameTime != null) {
+        final now = DateTime.now();
+        final diff = now.difference(_lastFrameTime!);
+        if (diff.inSeconds > 2) {
+          if (mounted) {
+            setState(() {
+              _videoStreamAvailable = false;
+              _statusDetail = '超过2秒未收到视频帧';
+            });
+          }
+        }
+      }
+    });
+
+    _videoChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onVideoFrame') {
+        final Uint8List h264Frame = call.arguments;
+        print('[Flutter] onVideoFrame received, len=${h264Frame.length}');
+        setState(() {
+          _videoStreamAvailable = true;
+          _statusDetail = '收到一键启动回调数据流，红点变绿点';
+          _lastFrameTime = DateTime.now();
+        });
+        if (!_decoderInitialized || _decoderSource != 'p2p') {
+          await _initDecoder(640, 480, source: 'p2p');
+          setState(() { _statusDetail = '收到onVideoFrame, 初始化解码器'; });
+        }
+        await _videoChannel.invokeMethod('queueH264', {
+          'data': h264Frame,
+          'pts': DateTime.now().millisecondsSinceEpoch,
+          'source': 'p2p',
+        });
+        print('[Flutter] queueH264 called (p2p), len=${h264Frame.length}');
+        setState(() { _statusDetail = 'queueH264已调用(p2p), len=${h264Frame.length}'; });
+      } else if (call.method == 'onCameraH264Frame') {
+        final Uint8List h264Frame = call.arguments;
+        print('[Flutter] onCameraH264Frame received, len=${h264Frame.length}');
+        setState(() {
+          _videoStreamAvailable = true;
+          _statusDetail = '收到摄像头H264数据流，红点变绿点';
+          _lastFrameTime = DateTime.now();
+        });
+        if (!_decoderInitialized || _decoderSource != 'camera') {
+          await _initDecoder(640, 480, source: 'camera');
+          setState(() { _statusDetail = '收到onCameraH264Frame, 初始化解码器'; });
+        }
+        await _videoChannel.invokeMethod('queueH264', {
+          'data': h264Frame,
+          'pts': DateTime.now().millisecondsSinceEpoch,
+          'source': 'camera',
+        });
+        print('[Flutter] queueH264 called (camera), len=${h264Frame.length}');
+        setState(() { _statusDetail = 'queueH264已调用(camera), len=${h264Frame.length}'; });
+      }
+    });
   }
 
   Future<dynamic> _handleMethod(MethodCall call) async {
     if (_isDisposed) return;
     
     switch (call.method) {
-      case 'onTextureFrame':
+      case 'RecbVideoData':  // 统一处理所有H264视频流的回调
+        try {
+          // 确保数据结构匹配native层
+          final Uint8List h264Frame = call.arguments['data'] as Uint8List;
+          final int length = h264Frame.length;
+          final int width = call.arguments['width'] ?? 640;
+          final int height = call.arguments['height'] ?? 480;
+          
+          print('[Flutter] RecbVideoData callback received, len=$length');
+          setState(() {
+            _videoStreamAvailable = true;
+            _statusDetail = '收到H264数据，长度=$length';
+            _lastFrameTime = DateTime.now();
+          });
+
+          // 确保解码器已初始化
+          if (!_decoderInitialized) {
+            await _initDecoder(width, height);
+            setState(() { _statusDetail = '初始化解码器完成'; });
+          }
+
+          // 送帧给解码器
+          await _channel.invokeMethod('queueH264', {
+            'data': h264Frame,
+            'pts': DateTime.now().millisecondsSinceEpoch,
+          });
+          print('[Flutter] H264 frame queued to decoder, len=$length');
+          setState(() { _statusDetail = 'H264帧已送入解码器队列'; });
+        } catch (e) {
+          print('[Flutter] Error processing RecbVideoData: $e');
+          setState(() { 
+            _statusDetail = 'RecbVideoData处理错误: $e';
+            _videoStreamAvailable = false;
+          });
+        }
+        break;
+
+      case 'onDecodedFrame':  // 处理解码后的帧
         if (_textureId != null) {
           try {
-            // 通知 Flutter 引擎更新纹理
+            final yuvData = call.arguments['yuvData'] as List<int>;
+            final width = call.arguments['width'] as int;
+            final height = call.arguments['height'] as int;
+            
+            // 更新Texture
             await _channel.invokeMethod('updateTexture', {
               'textureId': _textureId,
-              'width': call.arguments['width'],
-              'height': call.arguments['height'],
+              'yuvData': yuvData,
+              'width': width,
+              'height': height,
             });
+            
+            setState(() { _statusDetail = '解码完成，已更新Texture显示'; });
+            print('[Flutter] Texture updated with decoded frame: ${width}x${height}');
           } catch (e) {
-            log('[Flutter] updateTexture error: $e');
+            print('[Flutter] Error updating texture: $e');
+            setState(() { _statusDetail = 'Texture更新错误: $e'; });
           }
         }
         break;
+
       case 'onError':
         if (mounted) {
+          final errorMsg = call.arguments['message'] as String;
           setState(() {
-            _status = 'Error: ${call.arguments['message']}';
+            _status = 'Error: $errorMsg';
+            _videoStreamAvailable = false;
+            _statusDetail = '发生错误: $errorMsg';
           });
         }
         break;
@@ -253,10 +373,81 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
     }
   }
 
+  Future<void> _initDecoder(int width, int height, {String source = ''}) async {
+    if (_textureId == null) {
+      final int textureId = await _videoChannel.invokeMethod('createTexture');
+      setState(() { _textureId = textureId; });
+    }
+    await _videoChannel.invokeMethod('initDecoder', {
+      'textureId': _textureId,
+      'width': width,
+      'height': height,
+      'source': source,
+    });
+    setState(() {
+      _decoderInitialized = true;
+      _decoderSource = source;
+    });
+    log('[Flutter] initDecoder: source=$source, width=$width, height=$height, textureId=$_textureId');
+  }
+
+  Future<void> _releaseDecoder({String source = ''}) async {
+    await _videoChannel.invokeMethod('releaseDecoder', {'source': source});
+    setState(() {
+      _decoderInitialized = false;
+      _decoderSource = '';
+    });
+    log('[Flutter] releaseDecoder: source=$source');
+  }
+
+  Future<void> _startCameraTest() async {
+    try {
+      // 先确保之前的资源已释放
+      await _releaseDecoder();
+      
+      // 启动摄像头H264流，数据会通过RecbVideoData回调返回
+      await _channel.invokeMethod('startCameraH264Stream', {
+        'width': 640,
+        'height': 480,
+      });
+      
+      setState(() {
+        _videoStarted = true;
+        _statusDetail = '开启摄像头H264推流，等待RecbVideoData回调...';
+      });
+      
+      print('[Flutter] Started camera H264 stream test');
+    } catch (e) {
+      print('[Flutter] Error starting camera test: $e');
+      setState(() {
+        _statusDetail = '启动摄像头测试失败: $e';
+        _videoStarted = false;
+      });
+    }
+  }
+
+  Future<void> _stopCameraTest() async {
+    try {
+      await _channel.invokeMethod('stopCameraH264Stream');
+      await _releaseDecoder();
+      setState(() {
+        _videoStarted = false;
+        _videoStreamAvailable = false;
+        _statusDetail = '停止摄像头推流';
+      });
+      print('[Flutter] Stopped camera H264 stream test');
+    } catch (e) {
+      print('[Flutter] Error stopping camera test: $e');
+      setState(() {
+        _statusDetail = '停止摄像头测试失败: $e';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('P2P Video Test')),
+      appBar: AppBar(title: const Text('P2P视频解码测试')),
       body: Center(
         child: SingleChildScrollView(
           child: ConstrainedBox(
@@ -283,7 +474,7 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                Text('Status: $_status'),
+                Text('状态: $_status'),
                 const SizedBox(height: 20),
                 Wrap(
                   spacing: 8,
@@ -325,29 +516,43 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                const Text('视频流显示区：'),
+                Row(children: [
+                  const Text('视频流状态: '),
+                  _videoStreamAvailable ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_statusDetail, style: TextStyle(fontSize: 12, color: Colors.blueGrey))),
+                ],),
                 SizedBox(
                   width: 320,
                   height: 240,
                   child: _videoStarted
-                      ? _displayMode == 0
-                          ? AndroidView(
-                              viewType: 'p2p_video_view',
-                              creationParams: {'decodeMode': _decodeMode},
-                              creationParamsCodec: const StandardMessageCodec(),
+                      ? _textureId != null
+                          ? Texture(textureId: _textureId!)
+                          : Container(
+                              color: Colors.black12,
+                              alignment: Alignment.center,
+                              child: const Text('Texture 初始化中...', style: TextStyle(color: Colors.grey)),
                             )
-                          : _textureId != null
-                              ? Texture(textureId: _textureId!)
-                              : Container(
-                                  color: Colors.black12,
-                                  alignment: Alignment.center,
-                                  child: const Text('Texture 初始化中...', style: TextStyle(color: Colors.grey)),
-                                )
                       : Container(
                           color: Colors.black12,
                           alignment: Alignment.center,
                           child: const Text('请先点击一键启动', style: TextStyle(color: Colors.grey)),
                         ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _startCameraTest,
+                      child: const Text('开启摄像头测试'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: _stopCameraTest,
+                      child: const Text('停止测试'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -361,6 +566,7 @@ class _P2pVideoTestPageState extends State<P2pVideoTestPage> {
   void dispose() {
     _isDisposed = true;
     _cleanupResources();
+    _releaseDecoder();
     super.dispose();
   }
 } 

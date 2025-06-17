@@ -19,6 +19,9 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+// Forward declarations
+static void notifyError(const char* message);
+
 static JavaVM* g_vm = nullptr;
 static jobject g_p2pVideoView = nullptr;
 static jmethodID g_onVideoFrameMethod = nullptr;
@@ -40,6 +43,9 @@ static int g_videoWidth = 1280;  // 默认视频宽度
 static int g_videoHeight = 720;  // 默认视频高度
 static bool g_mqttInitialized = false;
 
+static char* g_phoneId = nullptr;
+static char* g_devId = nullptr;
+
 static bool initializeCodec() {
     std::lock_guard<std::mutex> lock(g_codecMutex);
     
@@ -59,13 +65,19 @@ static bool initializeCodec() {
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, g_videoWidth);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, g_videoHeight);
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, "video/avc");
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7F000789);  // COLOR_FormatYUV420Flexible
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, 2000000);  // 2Mbps
+    // 使用 Surface 颜色格式
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7F000789);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, 2000000);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, 30);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, 1);
+    // 添加 H264 特定配置
+    uint8_t csd0[] = { 0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x0a, 0x96, 0x54, 0x0b, 0x6c, 0x8c, 0x8c };
+    uint8_t csd1[] = { 0x00, 0x00, 0x00, 0x01, 0x68, 0xce, 0x38, 0x80 };
+    AMediaFormat_setBuffer(format, "csd-0", csd0, sizeof(csd0));
+    AMediaFormat_setBuffer(format, "csd-1", csd1, sizeof(csd1));
 
     // 配置解码器
-    media_status_t status = AMediaCodec_configure(g_mediaCodec, format, nullptr, nullptr, 0);
+    media_status_t status = AMediaCodec_configure(g_mediaCodec, format, g_nativeWindow, nullptr, 0);
     AMediaFormat_delete(format);
     
     if (status != AMEDIA_OK) {
@@ -112,7 +124,7 @@ void RecbMsgData(void* pMsgData, int nLen) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_P2pVideoView_bindNative(
+Java_com_mainipc_xiebaoxin_P2pVideoView_bindNative(
         JNIEnv* env,
         jobject thiz) {
     if (g_isDisposed) {
@@ -132,14 +144,30 @@ Java_com_example_music_1app_1framework_P2pVideoView_bindNative(
     // 获取方法 ID
     jclass clazz = env->GetObjectClass(thiz);
     g_onVideoFrameMethod = env->GetMethodID(clazz, "onVideoFrame", "([B)V");
+    if (g_onVideoFrameMethod == nullptr) {
+        LOGE("Failed to get onVideoFrame method");
+        notifyError("Failed to get onVideoFrame method");
+        return;
+    }
+
     g_onTextureFrameMethod = env->GetMethodID(clazz, "onTextureFrame", "(JII)V");
+    if (g_onTextureFrameMethod == nullptr) {
+        LOGE("Failed to get onTextureFrame method");
+        notifyError("Failed to get onTextureFrame method");
+        return;
+    }
+
     g_onErrorMethod = env->GetMethodID(clazz, "onError", "(Ljava/lang/String;)V");
+    if (g_onErrorMethod == nullptr) {
+        LOGE("Failed to get onError method");
+        return;
+    }
 
     LOGI("Native bind successful");
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_P2pVideoView_setDisplayMode(
+Java_com_mainipc_xiebaoxin_P2pVideoView_setDisplayMode(
         JNIEnv* env,
         jobject thiz,
         jint mode) {
@@ -153,7 +181,7 @@ Java_com_example_music_1app_1framework_P2pVideoView_setDisplayMode(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_P2pVideoView_setTextureId(
+Java_com_mainipc_xiebaoxin_P2pVideoView_setTextureId(
         JNIEnv* env,
         jobject thiz,
         jlong textureId) {
@@ -190,76 +218,58 @@ static JNIEnv* getJNIEnv() {
     return env;
 }
 
-// 视频数据回调
+// 处理 H264 帧数据
 void RecbVideoData(void* data, int length) {
-    LOGI("[自检] RecbVideoData called! length: %d", length);
-    
-    if (g_isDisposed || !g_vm || !g_p2pVideoView) {
-        LOGE("[自检] RecbVideoData: Invalid state - disposed: %d, vm: %p, view: %p", 
-             g_isDisposed.load(), g_vm, g_p2pVideoView);
+    if (g_isDisposed || !g_vm || !g_p2pVideoView || !g_onVideoFrameMethod) {
         return;
-    }
-
-    if (!data || length <= 0) {
-        LOGE("[自检] Invalid video data received");
-        return;
-    }
-
-    // 检查H.264数据格式
-    uint8_t* h264Data = static_cast<uint8_t*>(data);
-    bool isKeyFrame = false;
-    if (length > 4) {
-        // 检查NAL单元类型
-        uint8_t nalType = h264Data[4] & 0x1F;
-        isKeyFrame = (nalType == 5); // IDR帧
-        LOGI("[自检] NAL type: %d, isKeyFrame: %d", nalType, isKeyFrame);
     }
 
     JNIEnv* env;
     if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
-        LOGE("[自检] Failed to attach thread");
         return;
     }
 
-    try {
-        if (!g_onVideoFrameMethod) {
-            LOGE("[自检] g_onVideoFrameMethod is null");
-            return;
-        }
-        jbyteArray jData = env->NewByteArray(length);
-        if (!jData) {
-            LOGE("[自检] Failed to create byte array");
-            return;
-        }
-        env->SetByteArrayRegion(jData, 0, length, reinterpret_cast<const jbyte*>(data));
-        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, jData);
-        if (env->ExceptionCheck()) {
-            env->ExceptionDescribe();
-            env->ExceptionClear();
-            LOGE("[自检] Exception occurred during onVideoFrame call");
-        }
-        env->DeleteLocalRef(jData);
-        g_frameCount++;
-        if (isKeyFrame) {
-            LOGI("[自检] Key frame processed, total frames: %d", g_frameCount.load());
-        }
-    } catch (const std::exception& e) {
-        g_errorCount++;
-        LOGE("[自检] Exception in video data callback: %s", e.what());
-        notifyError(e.what());
+    // 检查是否是 H264 NAL 单元
+    uint8_t* h264Data = static_cast<uint8_t*>(data);
+    if (length < 4) {
+        return;
     }
 
+    // 查找 NAL 起始码
+    int startCode = (h264Data[0] << 24) | (h264Data[1] << 16) | (h264Data[2] << 8) | h264Data[3];
+    if (startCode != 0x00000001 && (startCode >> 8) != 0x000001) {
+        // 添加起始码
+        jbyteArray frameData = env->NewByteArray(length + 4);
+        uint8_t startCode[] = {0x00, 0x00, 0x00, 0x01};
+        env->SetByteArrayRegion(frameData, 0, 4, reinterpret_cast<jbyte*>(startCode));
+        env->SetByteArrayRegion(frameData, 4, length, reinterpret_cast<jbyte*>(data));
+        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, frameData);
+        env->DeleteLocalRef(frameData);
+    } else {
+        // 直接发送帧数据
+        jbyteArray frameData = env->NewByteArray(length);
+        env->SetByteArrayRegion(frameData, 0, length, reinterpret_cast<jbyte*>(data));
+        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, frameData);
+        env->DeleteLocalRef(frameData);
+    }
+
+    g_frameCount++;
     g_vm->DetachCurrentThread();
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_P2pVideoView_startP2pVideo(JNIEnv* env, jobject thiz) {
+Java_com_mainipc_xiebaoxin_P2pVideoView_startP2pVideo(JNIEnv* env, jobject thiz) {
+    if (g_isDisposed || !g_vm || !g_p2pVideoView) {
+        LOGE("[自检] startP2pVideo: Invalid state - disposed: %d, vm: %p, view: %p",
+             g_isDisposed.load(), g_vm, g_p2pVideoView);
+        return;
+    }
     LOGI("[自检] JNI startP2pVideo called");
     StartP2pVideo(RecbVideoData);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_P2pVideoView_stopP2pVideo(
+Java_com_mainipc_xiebaoxin_P2pVideoView_stopP2pVideo(
         JNIEnv* env,
         jobject thiz) {
     if (g_isDisposed) {
@@ -275,8 +285,16 @@ Java_com_example_music_1app_1framework_P2pVideoView_stopP2pVideo(
     LOGI("Stopping P2P video...");
     std::thread([&]() {
         try {
+            auto start = std::chrono::steady_clock::now();
             StopP2pVideo();
-            LOGI("P2P video stopped successfully");
+            auto end = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+            if (duration > 5) {
+                LOGE("StopP2pVideo took too long: %lld seconds", (long long)duration);
+                notifyError("StopP2pVideo timeout");
+            } else {
+                LOGI("P2P video stopped successfully");
+            }
         } catch (const std::exception& e) {
             LOGE("Error stopping P2P video: %s", e.what());
             notifyError(e.what());
@@ -286,7 +304,7 @@ Java_com_example_music_1app_1framework_P2pVideoView_stopP2pVideo(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_P2pVideoView_release(
+Java_com_mainipc_xiebaoxin_P2pVideoView_release(
         JNIEnv* env,
         jobject thiz) {
     g_isDisposed.store(true);
@@ -307,88 +325,67 @@ Java_com_example_music_1app_1framework_P2pVideoView_release(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_initMqtt(JNIEnv* env, jobject thiz, jstring phoneId) {
-    if (!phoneId) {
-        LOGE("initMqtt: phoneId is null");
-        notifyError("MQTT initialization failed: phoneId is null");
-        return;
+Java_com_mainipc_xiebaoxin_MainActivity_initMqtt(JNIEnv* env, jobject thiz, jstring phoneId) {
+    const char* cPhoneId = env->GetStringUTFChars(phoneId, nullptr);
+    LOGI("[JNI] initMqtt called: %s", cPhoneId);
+    
+    if (!g_mqttInitialized) {
+        if (g_phoneId) {
+            free(g_phoneId);
+        }
+        g_phoneId = strdup(cPhoneId);
+        InitMqtt(g_phoneId, RecbMsgData);
+        g_mqttInitialized = true;
+        LOGI("[JNI] MQTT initialized successfully");
     }
     
-    const char* phoneIdStr = env->GetStringUTFChars(phoneId, nullptr);
-    if (!phoneIdStr) {
-        LOGE("initMqtt: Failed to get phoneId string");
-        notifyError("MQTT initialization failed: Invalid phoneId");
-        return;
-    }
-    
-    LOGI("initMqtt: Initializing MQTT with phoneId: %s", phoneIdStr);
-    
-    // 检查是否已经初始化
-    static bool isInitialized = false;
-    if (isInitialized) {
-        LOGI("initMqtt: MQTT already initialized");
-        env->ReleaseStringUTFChars(phoneId, phoneIdStr);
-        return;
-    }
-    
-    // 初始化 MQTT
-    InitMqtt(const_cast<char*>(phoneIdStr), RecbMsgData);
-    isInitialized = true;
-    
-    LOGI("initMqtt: MQTT initialization completed successfully");
-    env->ReleaseStringUTFChars(phoneId, phoneIdStr);
+    env->ReleaseStringUTFChars(phoneId, cPhoneId);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_setDevP2p(JNIEnv* env, jobject /* this */, jstring devId) {
-    const char* pDevId = env->GetStringUTFChars(devId, nullptr);
-    LOGI("[native] JNI setDevP2p called: %s", pDevId);
-    SetDevP2p((char*)pDevId);
-    env->ReleaseStringUTFChars(devId, pDevId);
-    LOGI("[native] setDevP2p completed");
+Java_com_mainipc_xiebaoxin_MainActivity_setDevP2p(JNIEnv* env, jobject thiz, jstring devId) {
+    const char* cDevId = env->GetStringUTFChars(devId, nullptr);
+    LOGI("[JNI] setDevP2p called: %s", cDevId);
+    
+    if (g_devId) {
+        free(g_devId);
+    }
+    g_devId = strdup(cDevId);
+    SetDevP2p(g_devId);
+    
+    env->ReleaseStringUTFChars(devId, cDevId);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_startP2pVideo(
-        JNIEnv* env,
-        jobject thiz,
-        jstring devId) {
-    const char* devIdStr = env->GetStringUTFChars(devId, nullptr);
-    if (!devIdStr) {
+Java_com_mainipc_xiebaoxin_MainActivity_startP2pVideo(JNIEnv* env, jobject thiz, jstring devId) {
+    if (!g_mqttInitialized) {
+        LOGE("[JNI] MQTT not initialized, cannot start P2P video");
         return;
     }
 
-    if (!&RecbVideoData) {
-        LOGE("RecbVideoData callback is not set");
-        env->ReleaseStringUTFChars(devId, devIdStr);
-        return;
+    const char* cDevId = env->GetStringUTFChars(devId, nullptr);
+    LOGI("[JNI] startP2pVideo called: %s", cDevId);
+    
+    if (g_devId) {
+        free(g_devId);
     }
-
-    try {
-        g_frameCount.store(0);
-        g_errorCount.store(0);
-        
-        StartP2pVideo(RecbVideoData);
-        
-    } catch (const std::exception& e) {
-        notifyError(e.what());
-    } catch (...) {
-        notifyError("Unknown exception in startP2pVideo");
-    }
-
-    env->ReleaseStringUTFChars(devId, devIdStr);
+    g_devId = strdup(cDevId);
+    SetDevP2p(g_devId);
+    
+    StartP2pVideo(RecbVideoData);
+    
+    env->ReleaseStringUTFChars(devId, cDevId);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_stopP2pVideo(JNIEnv* env, jobject /* this */) {
-    LOGI("[native] JNI stopP2pVideo called");
+Java_com_mainipc_xiebaoxin_MainActivity_stopP2pVideo(JNIEnv* env, jobject thiz) {
+    LOGI("[JNI] stopP2pVideo called");
     StopP2pVideo();
-    LOGI("[native] StopP2pVideo called");
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_setFlutterTextureId(JNIEnv* env, jobject thiz, jlong textureId) {
+Java_com_mainipc_xiebaoxin_MainActivity_setFlutterTextureId(JNIEnv* env, jobject thiz, jlong textureId) {
     g_flutterTextureId = textureId;
     __android_log_print(ANDROID_LOG_INFO, "NativeLib", "setFlutterTextureId called: %lld", (long long)textureId);
     // TODO: 这里可以根据 textureId 获取/绑定 Surface/SurfaceTexture
@@ -396,7 +393,7 @@ Java_com_example_music_1app_1framework_MainActivity_setFlutterTextureId(JNIEnv* 
 
 // 添加P2P连接状态检查函数
 extern "C" JNIEXPORT jint JNICALL
-Java_com_example_music_1app_1framework_MainActivity_getP2pStatus(JNIEnv* env, jobject thiz) {
+Java_com_mainipc_xiebaoxin_MainActivity_getP2pStatus(JNIEnv* env, jobject thiz) {
     LOGI("[自检] Checking P2P connection status...");
     // 这里应该调用实际的P2P状态检查函数
     // 临时返回1表示已连接
@@ -405,7 +402,7 @@ Java_com_example_music_1app_1framework_MainActivity_getP2pStatus(JNIEnv* env, jo
 
 // 添加测试函数
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_music_1app_1framework_P2pTestActivity_testInitMqtt(JNIEnv* env, jobject thiz, jstring phoneId) {
+Java_com_mainipc_xiebaoxin_P2pTestActivity_testInitMqtt(JNIEnv* env, jobject thiz, jstring phoneId) {
     const char* pPhoneId = env->GetStringUTFChars(phoneId, nullptr);
     LOGI("[测试] 调用InitMqtt: %s", pPhoneId);
     
@@ -416,7 +413,7 @@ Java_com_example_music_1app_1framework_P2pTestActivity_testInitMqtt(JNIEnv* env,
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_music_1app_1framework_P2pTestActivity_testSetDevP2p(JNIEnv* env, jobject thiz, jstring devId) {
+Java_com_mainipc_xiebaoxin_P2pTestActivity_testSetDevP2p(JNIEnv* env, jobject thiz, jstring devId) {
     const char* pDevId = env->GetStringUTFChars(devId, nullptr);
     LOGI("[测试] 调用SetDevP2p: %s", pDevId);
     
@@ -427,7 +424,7 @@ Java_com_example_music_1app_1framework_P2pTestActivity_testSetDevP2p(JNIEnv* env
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_music_1app_1framework_P2pTestActivity_testStartP2pVideo(
+Java_com_mainipc_xiebaoxin_P2pTestActivity_testStartP2pVideo(
         JNIEnv* env,
         jobject thiz) {
     if (!&RecbVideoData) {
@@ -446,73 +443,76 @@ Java_com_example_music_1app_1framework_P2pTestActivity_testStartP2pVideo(
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_music_1app_1framework_P2pTestActivity_testStopP2pVideo(JNIEnv* env, jobject thiz) {
+Java_com_mainipc_xiebaoxin_P2pTestActivity_testStopP2pVideo(JNIEnv* env, jobject thiz) {
     LOGI("[测试] 调用StopP2pVideo");
     StopP2pVideo();
     return JNI_TRUE;
 }
 
-extern "C" JNIEXPORT jint JNICALL
-Java_com_example_music_1app_1framework_MainActivity_nativeInitMqtt(JNIEnv* env, jobject thiz, jstring phoneId) {
-    const char* cPhoneId = env->GetStringUTFChars(phoneId, nullptr);
-    LOGI("[JNI] nativeInitMqtt called: %s", cPhoneId);
-    
-    // 初始化 MQTT
-    if (!g_mqttInitialized) {
-        char* phoneIdCopy = strdup(cPhoneId);  // 创建可修改的副本
-        InitMqtt(phoneIdCopy, RecbMsgData);
-        free(phoneIdCopy);  // 释放副本
-        g_mqttInitialized = true;
-        LOGI("[JNI] MQTT initialized successfully");
+extern "C" JNIEXPORT void JNICALL
+Java_com_mainipc_xiebaoxin_MainActivity_deinitMqtt(JNIEnv* env, jobject thiz) {
+    LOGI("[JNI] deinitMqtt called");
+    StopP2pVideo();   // 必须先停视频
+    DeinitMqtt();     // 再断MQTT
+    g_mqttInitialized = false;
+
+    // 清理字符串
+    if (g_phoneId) {
+        free(g_phoneId);
+        g_phoneId = nullptr;
     }
-    
-    env->ReleaseStringUTFChars(phoneId, cPhoneId);
-    return g_mqttInitialized ? 0 : -1;
+    if (g_devId) {
+        free(g_devId);
+        g_devId = nullptr;
+    }
+
+    LOGI("[JNI] MQTT deinitialized");
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_nativeSetDevP2p(JNIEnv* env, jobject thiz, jstring devId) {
-    const char* cDevId = env->GetStringUTFChars(devId, nullptr);
-    LOGI("[JNI] nativeSetDevP2p called: %s", cDevId);
-    env->ReleaseStringUTFChars(devId, cDevId);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_nativeStartP2pVideo(JNIEnv* env, jobject thiz, jstring devId) {
-    if (!g_mqttInitialized) {
-        LOGE("[JNI] MQTT not initialized, cannot start P2P video");
+Java_com_mainipc_xiebaoxin_MainActivity_nativeRecbVideoData(
+        JNIEnv *env,
+        jobject /* this */,
+        jbyteArray data,
+        jint length) {
+    if (!g_p2pVideoView) {
+        LOGE("[自检] RecbVideoData: Invalid state - disposed: %d, vm: %p, view: %p",
+             g_isDisposed.load(), g_vm, g_p2pVideoView);
         return;
     }
 
-    const char* cDevId = env->GetStringUTFChars(devId, nullptr);
-    LOGI("[JNI] nativeStartP2pVideo called: %s", cDevId);
-    
-    // 设置设备 ID
-    char* devIdCopy = strdup(cDevId);  // 创建可修改的副本
-    SetDevP2p(devIdCopy);
-    free(devIdCopy);  // 释放副本
-    
-    // 启动 P2P 视频
-    StartP2pVideo(RecbVideoData);
-    
-    env->ReleaseStringUTFChars(devId, cDevId);
-}
+    uint8_t *buffer = new uint8_t[length];
+    env->GetByteArrayRegion(data, 0, length, reinterpret_cast<jbyte *>(buffer));
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivity_nativeStopP2pVideo(JNIEnv* env, jobject thiz) {
-    LOGI("[JNI] nativeStopP2pVideo called");
-    StopP2pVideo();
-}
+    LOGI("[自检] RecbVideoData called! length: %d", length);
+    if (length > 16) {
+        LOGI("[自检] NAL type: %d, isKeyFrame: %d, first bytes: %02X %02X %02X %02X %02X",
+             buffer[4] & 0x1F, (buffer[4] & 0x1F) == 7,
+             buffer[0], buffer[1], buffer[2], buffer[3], buffer[4]);
+    }
 
-extern "C" JNIEXPORT jint JNICALL
-Java_com_example_music_1app_1framework_MainActivity_nativeGetP2pStatus(JNIEnv* env, jobject thiz) {
-    LOGI("[JNI] nativeGetP2pStatus called");
-    return g_mqttInitialized ? 1 : 0;
-}
+    // 获取Java类和方法ID
+    jclass viewClass = env->GetObjectClass(g_p2pVideoView);
+    jmethodID onVideoFrameMethod = env->GetMethodID(viewClass, "onVideoFrame", "([B)V");
+    if (!onVideoFrameMethod) {
+        LOGE("[自检] Failed to get onVideoFrame method");
+        delete[] buffer;
+        env->DeleteLocalRef(viewClass);
+        return;
+    }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_example_music_1app_1framework_MainActivityKt_startP2pVideo(JNIEnv* env, jobject thiz, jstring devId) {
-    Java_com_example_music_1app_1framework_MainActivity_startP2pVideo(env, thiz, devId);
+    // 创建Java字节数组
+    jbyteArray frameData = env->NewByteArray(length);
+    env->SetByteArrayRegion(frameData, 0, length, reinterpret_cast<jbyte *>(buffer));
+
+    // 调用Java方法
+    LOGI("[自检] 调用onVideoFrame方法");
+    env->CallVoidMethod(g_p2pVideoView, onVideoFrameMethod, frameData);
+
+    // 清理资源
+    delete[] buffer;
+    env->DeleteLocalRef(frameData);
+    env->DeleteLocalRef(viewClass);
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
@@ -523,10 +523,20 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
 JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
     g_vm = nullptr;
     if (g_p2pVideoView != nullptr) {
-        JNIEnv* env = getJNIEnv();
-        if (env) {
+        JNIEnv* env = nullptr;
+        if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
             env->DeleteGlobalRef(g_p2pVideoView);
         }
         g_p2pVideoView = nullptr;
+    }
+    
+    // 清理字符串
+    if (g_phoneId) {
+        free(g_phoneId);
+        g_phoneId = nullptr;
+    }
+    if (g_devId) {
+        free(g_devId);
+        g_devId = nullptr;
     }
 } 

@@ -1,5 +1,5 @@
-name: music_app_framework
-description: "A new Flutter project for a music sheet application."
+name: ipcso_main
+description: "A new Flutter project for IPC application."
 publish_to: 'none'
 version: 1.0.0+1
 

@@ -15,6 +15,7 @@ class P2pVideoMainPage extends StatefulWidget {
 
 class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
+  static const MethodChannel _videoChannel = MethodChannel('p2p_video_channel');
   String _status = 'Idle';
   final TextEditingController _devIdController = TextEditingController(text: 'camId123');
   final TextEditingController _phoneIdController = TextEditingController(text: 'phoneId123');
@@ -22,10 +23,14 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   bool _videoStreamAvailable = false;  // 视频流状态
   int _decodeMode = 0; // 默认使用硬解(MediaCodec)
   int _displayMode = 1; // 默认使用Texture模式
-  int? _textureId;
   bool _isDisposed = false;
   DateTime? _lastFrameTime;  // 最后收到视频帧的时间
   bool _isHardwareDecodingFailed = false;  // 硬解是否失败
+  bool _decoderInitialized = false;
+  String _decoderSource = '';
+  String _statusDetail = '';
+  int? _textureId;
+  int? _platformViewId; // 新增：保存PlatformView的id
 
   @override
   void initState() {
@@ -50,6 +55,29 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
             });
           }
         }
+      }
+    });
+
+    _videoChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onVideoFrame') {
+        final Uint8List h264Frame = call.arguments;
+        print('[Flutter] onVideoFrame received, len=${h264Frame.length}');
+        setState(() {
+          _videoStreamAvailable = true;
+          _statusDetail = '收到一键启动回调数据流，红点变绿点';
+          _lastFrameTime = DateTime.now();
+        });
+        if (!_decoderInitialized || _decoderSource != 'p2p') {
+          await _initDecoder(640, 480, source: 'p2p');
+          setState(() { _statusDetail = '收到onVideoFrame, 初始化解码器'; });
+        }
+        await _videoChannel.invokeMethod('queueH264', {
+          'data': h264Frame,
+          'pts': DateTime.now().millisecondsSinceEpoch,
+          'source': 'p2p',
+        });
+        print('[Flutter] queueH264 called (p2p), len=${h264Frame.length}');
+        setState(() { _statusDetail = 'queueH264已调用(p2p), len=${h264Frame.length}'; });
       }
     });
   }
@@ -175,17 +203,13 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
 
   Future<void> _startP2pVideo() async {
     if (_isDisposed) return;
-    
     try {
       log('[Flutter] 开始启动 P2P 视频: ${_devIdController.text}');
-      log('[Flutter] 调用 startP2pVideo 方法');
-      
-      // 如果硬解失败过，使用软解
+      setState(() { _statusDetail = '调用 _startP2pVideo'; });
       if (_isHardwareDecodingFailed) {
         _decodeMode = 1;
         log('[Flutter] 使用软解模式（硬解失败）');
       }
-      
       if (_displayMode == 1) {
         log('[Flutter] 创建 Texture');
         _textureId = await _channel.invokeMethod('createTexture');
@@ -194,43 +218,36 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         }
         log('[Flutter] Texture 创建成功，ID: $_textureId');
       }
-      
+      if (!_decoderInitialized || _decoderSource != 'p2p') {
+        await _initDecoder(640, 480, source: 'p2p');
+        setState(() { _statusDetail = '已初始化解码器'; });
+      }
       log('[Flutter] 调用原生 startP2pVideo，等待 RecbVideoData 回调...');
+      setState(() { _statusDetail = '等待设备回调数据流...'; });
       await _channel.invokeMethod('startP2pVideo', {
         'devId': _devIdController.text,
         'displayMode': _displayMode,
         'textureId': _textureId,
         'decodeMode': _decodeMode,
       });
-      
-      if (mounted) {
-        setState(() {
-          _status = 'startP2pVideo called: ${_devIdController.text}';
-          _videoStarted = true;
-          _videoStreamAvailable = false;  // 开始时设置为false，等待第一帧
-          _lastFrameTime = null;  // 清除最后帧时间
-        });
-      }
-      
+      setState(() { _statusDetail = 'startP2pVideo已调用，等待第一帧...'; });
       log('[Flutter] 一键启动完成，等待视频数据...');
     } catch (e) {
       log('[Flutter] startP2pVideo error: $e');
-      if (mounted) {
-        setState(() {
-          _status = 'Error: $e';
-          _videoStreamAvailable = false;
-        });
-      }
+      setState(() { _statusDetail = '启动异常: $e'; });
     }
   }
 
   Future<void> _stopP2pVideo() async {
     if (_isDisposed) return;
-    
     try {
       log('[Flutter] 调用 stopP2pVideo');
-      await _channel.invokeMethod('stopP2pVideo');
-      
+      if (_platformViewId != null) {
+        final channel = MethodChannel('p2p_video_view_$_platformViewId');
+        await channel.invokeMethod('stopP2pVideo');
+      } else {
+        await _channel.invokeMethod('stopP2pVideo');
+      }
       if (_textureId != null) {
         try {
           await _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
@@ -239,13 +256,12 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         }
         _textureId = null;
       }
-      
       if (mounted) {
         setState(() {
           _status = 'stopped';
-          _videoStarted = false;
-          _videoStreamAvailable = false;  // 停止时重置视频流状态
-          _lastFrameTime = null;  // 清除最后帧时间
+          // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
+          _videoStreamAvailable = false;
+          _lastFrameTime = null;
         });
       }
     } catch (e) {
@@ -258,18 +274,29 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     }
   }
 
+  Future<void> _startP2pVideoOnPlatformView() async {
+    if (_platformViewId == null) return;
+    final channel = MethodChannel('p2p_video_view_$_platformViewId');
+    await channel.invokeMethod('startP2pVideo', {
+      'devId': _devIdController.text,
+      'displayMode': _displayMode,
+      'textureId': _textureId,
+      'decodeMode': _decodeMode,
+    });
+  }
+
   Future<void> _startP2pVideoFull() async {
     if (_isDisposed) return;
-    
     try {
       log('[Flutter] 一键启动开始');
       await _initMqtt();
       await _setDevP2p();
-      await _startP2pVideo();
+      setState(() { _videoStarted = true; }); // 先显示AndroidView
+      // AndroidView创建后会自动回调onPlatformViewCreated
+      // _startP2pVideoOnPlatformView会在onPlatformViewCreated里调用
       if (mounted) {
         setState(() {
           _status = '一键启动完成';
-          _videoStarted = true;
         });
       }
     } catch (e) {
@@ -298,6 +325,29 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     }
   }
 
+  Future<void> _initDecoder(int width, int height, {String source = ''}) async {
+    await _videoChannel.invokeMethod('initDecoder', {
+      'textureId': _textureId,
+      'width': width,
+      'height': height,
+      'source': source,
+    });
+    setState(() {
+      _decoderInitialized = true;
+      _decoderSource = source;
+    });
+    log('[Flutter] initDecoder: source=$source, width=$width, height=$height, textureId=$_textureId');
+  }
+
+  Future<void> _releaseDecoder({String source = ''}) async {
+    await _videoChannel.invokeMethod('releaseDecoder', {'source': source});
+    setState(() {
+      _decoderInitialized = false;
+      _decoderSource = '';
+    });
+    log('[Flutter] releaseDecoder: source=$source');
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
@@ -306,6 +356,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     }
     _devIdController.dispose();
     _phoneIdController.dispose();
+    _releaseDecoder();
     super.dispose();
   }
 
@@ -382,29 +433,68 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                 Row(children: [
                   const Text('视频流显示区：'),
                   _videoStreamAvailable ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_statusDetail, style: TextStyle(fontSize: 12, color: Colors.blueGrey))),
                 ],),
-                SizedBox(
-                  width: 320,
-                  height: 240,
-                  child: _videoStarted
-                      ? _textureId != null
-                          ? Texture(textureId: _textureId!)
-                          : Container(
-                              color: Colors.black12,
-                              alignment: Alignment.center,
-                              child: const Text('Texture 初始化中...', style: TextStyle(color: Colors.grey)),
-                            )
-                      : Container(
-                          color: Colors.black12,
-                          alignment: Alignment.center,
-                          child: const Text('请先点击一键启动', style: TextStyle(color: Colors.grey)),
-                        ),
+                _buildVideoView(),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () async {
+                        await _videoChannel.invokeMethod('startCameraH264Stream', {
+                          'width': 640,
+                          'height': 480,
+                        });
+                        setState(() {
+                          _videoStarted = true;
+                          _statusDetail = '开启摄像头H264推流测试...';
+                        });
+                      },
+                      child: const Text('开启摄像头H264推流测试'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await _videoChannel.invokeMethod('stopCameraH264Stream');
+                        setState(() {
+                          // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
+                          _videoStreamAvailable = false;
+                          _statusDetail = '停止摄像头H264推流';
+                        });
+                      },
+                      child: const Text('停止推流'),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildVideoView() {
+    return SizedBox(
+      width: 320,
+      height: 240,
+      child: _videoStarted
+          ? AndroidView(
+              viewType: 'p2p_video_view',
+              onPlatformViewCreated: (int id) {
+                _platformViewId = id;
+                _startP2pVideoOnPlatformView();
+              },
+              creationParams: const {},
+              creationParamsCodec: const StandardMessageCodec(),
+            )
+          : Container(
+              color: Colors.black12,
+              alignment: Alignment.center,
+              child: const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
+            ),
     );
   }
 } 

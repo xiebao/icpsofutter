@@ -1234,6 +1234,42 @@
 			"value" : "/Users/a0000/Documents/Ipc-app/main_app_framework/android/app/src/main/cpp"
 		},
 		{
+			"name" : "android-lib",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a library."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libandroid.so"
+		},
+		{
+			"name" : "log-lib",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a library."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/liblog.so"
+		},
+		{
+			"name" : "mediandk-lib",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Path to a library."
+				}
+			],
+			"type" : "FILEPATH",
+			"value" : "/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libmediandk.so"
+		},
+		{
 			"name" : "native-lib_LIB_DEPENDS",
 			"properties" : 
 			[
@@ -1243,7 +1279,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "general;p2p;general;log;"
+			"value" : "general;/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/liblog.so;general;/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libandroid.so;general;p2p;general;/Users/a0000/Library/Android/sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/21/libmediandk.so;general;GLESv2;general;EGL;"
 		},
 		{
 			"name" : "native_lib_BINARY_DIR",
