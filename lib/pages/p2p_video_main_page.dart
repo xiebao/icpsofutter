@@ -44,16 +44,22 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         timer.cancel();
         return;
       }
-      
-      if (_videoStarted && _lastFrameTime != null) {
-        final now = DateTime.now();
-        final diff = now.difference(_lastFrameTime!);
-        if (diff.inSeconds > 2) {  // 如果超过2秒没有收到新帧，认为视频流断开
-          if (mounted) {
+      if (_videoStarted) {
+        if (_lastFrameTime != null) {
+          final now = DateTime.now();
+          final diff = now.difference(_lastFrameTime!);
+          if (diff.inSeconds > 2 && _videoStreamAvailable) {
             setState(() {
               _videoStreamAvailable = false;
+              _statusDetail = '超过2秒未收到视频帧，红点变红';
             });
+            log('[Flutter] 超过2秒未收到视频帧，红点变红');
           }
+        } else if (!_videoStreamAvailable) {
+          setState(() {
+            _videoStreamAvailable = false;
+            _statusDetail = '尚未收到视频流，红点为红';
+          });
         }
       }
     });
@@ -62,11 +68,15 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       if (call.method == 'onVideoFrame') {
         final Uint8List h264Frame = call.arguments;
         print('[Flutter] onVideoFrame received, len=${h264Frame.length}');
-        setState(() {
-          _videoStreamAvailable = true;
-          _statusDetail = '收到一键启动回调数据流，红点变绿点';
-          _lastFrameTime = DateTime.now();
-        });
+        // 只要收到帧，立即变绿
+        if (!_videoStreamAvailable) {
+          setState(() {
+            _videoStreamAvailable = true;
+            _statusDetail = '收到视频帧，红点变绿';
+          });
+          log('[Flutter] 收到 onVideoFrame，红点变绿');
+        }
+        _lastFrameTime = DateTime.now();
         if (!_decoderInitialized || _decoderSource != 'p2p') {
           await _initDecoder(640, 480, source: 'p2p');
           setState(() { _statusDetail = '收到onVideoFrame, 初始化解码器'; });
@@ -259,10 +269,11 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       if (mounted) {
         setState(() {
           _status = 'stopped';
-          // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
           _videoStreamAvailable = false;
           _lastFrameTime = null;
+          _statusDetail = '已停止视频流，红点为红';
         });
+        log('[Flutter] 已停止视频流，红点为红');
       }
     } catch (e) {
       log('[Flutter] stopP2pVideo error: $e');
