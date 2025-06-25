@@ -57,10 +57,10 @@ class _CloudStoragePageState extends State<CloudStoragePage> {
     final bgColor = isDark ? Color(0xFF222831) : Color(0xFFF6F9FB);
     final textColor = isDark ? Colors.white : Colors.black87;
     return Scaffold(
-      backgroundColor: bgColor,
+      // 不指定backgroundColor，自动跟随主题
       appBar: AppBar(
         title: Text('云存储购买'),
-        backgroundColor: bgColor,
+        // 不指定backgroundColor，自动跟随主题
         elevation: 0,
         iconTheme: IconThemeData(color: textColor),
         titleTextStyle: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold),
@@ -167,7 +167,7 @@ class _CloudStoragePageState extends State<CloudStoragePage> {
                 children: [
                   Checkbox(value: false, onChanged: (v) {}),
                   Expanded(
-                    child: Text('已阅读并同意《米家云存储用户协议》和《米家云存储自动续费服务协议》', 
+                    child: Text('已阅读并同意《云存储用户协议》和《云存储自动续费服务协议》', 
                                style: TextStyle(fontSize: 12, color: textColor)),
                   ),
                 ],
