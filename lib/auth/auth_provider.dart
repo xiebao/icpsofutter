@@ -3,11 +3,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../api/dio_client.dart';
 import '../models/user.dart';
+import '../services/mqtt_service.dart';
+import '../services/app_lifecycle_service.dart';
+import 'dart:developer';
 
 class AuthProvider with ChangeNotifier {
   String? _token;
   User? _user;
   bool _isAuthenticated = false;
+  final MqttService _mqttService = MqttService.instance;
+  final AppLifecycleService _appLifecycleService = AppLifecycleService.instance;
 
   String? get token => _token;
   User? get user => _user;
@@ -24,19 +29,38 @@ class AuthProvider with ChangeNotifier {
       // For now, we'll just set a placeholder user
       _user = User(id: '1', name: 'Cached User', email: 'user@123.com');
       DioClient.setAuthToken(_token!);
+      
+      // 初始化 MQTT 服务
+      await _mqttService.init();
+      
+      // 如果有缓存的用户ID，启动 MQTT 连接
+      final userId = prefs.getString('userid');
+      if (userId != null) {
+        log('[AuthProvider] 检测到缓存的用户ID: $userId，启动 MQTT 连接');
+        await _mqttService.startMqtt(userId);
+        await _appLifecycleService.updateCurrentUserId(userId);
+      }
     }
     notifyListeners();
   }
 
   Future<bool> login(String email, String password) async {
     // 本地Mock账号（开发调试用）
-    if (email == 'demo' && password == '123') {
+    if (email == 'phoneId123' && password == '123') {
     // if (email == 'test@123.com' && password == '123456') {
       _token = 'mock_token';
       _user = User(id: '1', name: '测试用户', email: email, avatarUrl: null);
       _isAuthenticated = true;
+      
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('jwt_token', _token!);
+      await prefs.setString('userid', email); // 保存用户ID用于MQTT
+      
+      // 初始化 MQTT 服务并启动连接
+      await _mqttService.init();
+      await _mqttService.startMqtt(email);
+      await _appLifecycleService.updateCurrentUserId(email);
+      
       notifyListeners();
       return true;
     }
@@ -56,6 +80,12 @@ class AuthProvider with ChangeNotifier {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', _token!);
+        await prefs.setString('userid', email); // 保存用户ID用于MQTT
+        
+        // 初始化 MQTT 服务并启动连接
+        await _mqttService.init();
+        await _mqttService.startMqtt(email);
+        await _appLifecycleService.updateCurrentUserId(email);
         
         notifyListeners();
         return true;
@@ -69,6 +99,10 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // 停止 MQTT 连接
+    await _mqttService.stopMqtt();
+    _appLifecycleService.clearCurrentUserId();
+    
     _token = null;
     _user = null;
     _isAuthenticated = false;
@@ -77,6 +111,7 @@ class AuthProvider with ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
+    await prefs.remove('userid'); // 清除用户ID
     
     notifyListeners();
   }

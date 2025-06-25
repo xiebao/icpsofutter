@@ -87,9 +87,13 @@ class HomeContent extends StatelessWidget {
         
             ElevatedButton(
               onPressed: () {
-                Navigator.of(context).pushNamed('/p2p_video_main');
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => P2pVideoMainPage(devId: 'camId123'),
+                  ),
+                );
               },
-              child: Text('P2P视频流'),
+              child: Text('P2P视频-camId123'),
             ),
           ],
         ),

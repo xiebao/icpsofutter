@@ -138,4 +138,23 @@ class MainActivity: FlutterActivity() {
         cameraStreamer?.release()
         cameraStreamer = null
     }
+    
+    // MQTT 消息回调方法，由 C++ 调用
+    fun onMqttMessage(data: ByteArray, length: Int) {
+        Log.d(TAG, "Received MQTT message, length: $length")
+        
+        try {
+            // 将消息转换为字符串（假设是 JSON 格式）
+            val messageString = String(data, 0, length, Charsets.UTF_8)
+            Log.d(TAG, "MQTT message content: $messageString")
+            
+            // 通过 MethodChannel 发送消息到 Flutter
+            methodChannel?.invokeMethod("onMqttMessage", mapOf(
+                "data" to messageString,
+                "length" to length
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing MQTT message", e)
+        }
+    }
 }

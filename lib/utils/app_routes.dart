@@ -20,6 +20,6 @@ class AppRoutes {
     settings: (context) => SettingsPage(),
     profile: (context) => ProfilePage(),
     privacy: (context) => PrivacyPolicyPage(),
-    p2pVideoMain: (context) => const P2pVideoMainPage(),
+    // P2P 视频页面需要参数，不在这里定义
   };
 }

@@ -46,6 +46,10 @@ static bool g_mqttInitialized = false;
 static char* g_phoneId = nullptr;
 static char* g_devId = nullptr;
 
+// 添加全局变量用于消息回调
+static jobject g_mainActivity = nullptr;
+static jmethodID g_onMqttMessageMethod = nullptr;
+
 static bool initializeCodec() {
     std::lock_guard<std::mutex> lock(g_codecMutex);
     
@@ -118,9 +122,38 @@ static void releaseCodec() {
     g_isCodecInitialized = false;
 }
 
-// 空实现的消息回调
+// 实现 MQTT 消息回调函数
 void RecbMsgData(void* pMsgData, int nLen) {
-    // 完全空的实现，不做任何处理
+    LOGI("[MQTT] Received message, length: %d", nLen);
+    
+    if (!g_vm || !g_mainActivity || !g_onMqttMessageMethod) {
+        LOGE("[MQTT] Cannot deliver message - missing JNI references");
+        return;
+    }
+    
+    JNIEnv* env;
+    if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+        LOGE("[MQTT] Failed to attach thread");
+        return;
+    }
+    
+    try {
+        // 创建 Java 字节数组
+        jbyteArray messageData = env->NewByteArray(nLen);
+        env->SetByteArrayRegion(messageData, 0, nLen, reinterpret_cast<jbyte*>(pMsgData));
+        
+        // 调用 Java 方法传递消息
+        env->CallVoidMethod(g_mainActivity, g_onMqttMessageMethod, messageData, nLen);
+        
+        // 清理资源
+        env->DeleteLocalRef(messageData);
+        
+        LOGI("[MQTT] Message delivered to Java successfully");
+    } catch (...) {
+        LOGE("[MQTT] Exception occurred while delivering message");
+    }
+    
+    g_vm->DetachCurrentThread();
 }
 
 // 处理 H264 帧数据
@@ -356,13 +389,30 @@ Java_com_mainipc_xiebaoxin_MainActivity_initMqtt(JNIEnv* env, jobject thiz, jstr
     LOGI("[JNI] initMqtt called: %s", cPhoneId);
     
     if (!g_mqttInitialized) {
+        // 保存 MainActivity 实例的全局引用
+        if (g_mainActivity != nullptr) {
+            env->DeleteGlobalRef(g_mainActivity);
+        }
+        g_mainActivity = env->NewGlobalRef(thiz);
+        
+        // 获取消息回调方法 ID
+        jclass mainActivityClass = env->GetObjectClass(thiz);
+        g_onMqttMessageMethod = env->GetMethodID(mainActivityClass, "onMqttMessage", "([BI)V");
+        if (g_onMqttMessageMethod == nullptr) {
+            LOGE("[JNI] Failed to get onMqttMessage method");
+            env->DeleteLocalRef(mainActivityClass);
+            env->ReleaseStringUTFChars(phoneId, cPhoneId);
+            return;
+        }
+        env->DeleteLocalRef(mainActivityClass);
+        
         if (g_phoneId) {
             free(g_phoneId);
         }
         g_phoneId = strdup(cPhoneId);
         InitMqtt(g_phoneId, RecbMsgData);
         g_mqttInitialized = true;
-        LOGI("[JNI] MQTT initialized successfully");
+        LOGI("[JNI] MQTT initialized successfully with message callback");
     }
     
     env->ReleaseStringUTFChars(phoneId, cPhoneId);
@@ -491,8 +541,15 @@ Java_com_mainipc_xiebaoxin_MainActivity_deinitMqtt(JNIEnv* env, jobject thiz) {
         free(g_devId);
         g_devId = nullptr;
     }
+    
+    // 清理 MainActivity 全局引用
+    if (g_mainActivity != nullptr) {
+        env->DeleteGlobalRef(g_mainActivity);
+        g_mainActivity = nullptr;
+    }
+    g_onMqttMessageMethod = nullptr;
 
-    LOGI("[JNI] MQTT deinitialized");
+    LOGI("[JNI] MQTT deinitialized and resources cleaned");
 }
 
 extern "C" JNIEXPORT void JNICALL

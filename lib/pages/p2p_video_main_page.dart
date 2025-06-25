@@ -7,7 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 
 class P2pVideoMainPage extends StatefulWidget {
-  const P2pVideoMainPage({Key? key}) : super(key: key);
+  final String devId;
+  
+  const P2pVideoMainPage({Key? key, required this.devId}) : super(key: key);
 
   @override
   State<P2pVideoMainPage> createState() => _P2pVideoMainPageState();
@@ -17,8 +19,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
   static const MethodChannel _videoChannel = MethodChannel('p2p_video_channel');
   String _status = 'Idle';
-  final TextEditingController _devIdController = TextEditingController(text: 'camId123');
-  final TextEditingController _phoneIdController = TextEditingController(text: 'phoneId123');
+  late final TextEditingController _devIdController;
   bool _videoStarted = false;
   int _decodeMode = 0; // 默认使用硬解(MediaCodec)
   int _displayMode = 1; // 默认使用Texture模式
@@ -34,6 +35,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   @override
   void initState() {
     super.initState();
+    _devIdController = TextEditingController(text: widget.devId);
     _channel.setMethodCallHandler(_handleMethod);
     _requestPermissions();
     
@@ -157,27 +159,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     }
   }
 
-  Future<void> _initMqtt() async {
-    if (_isDisposed) return;
-    
-    try {
-      log('[Flutter] 调用 initMqtt: ${_phoneIdController.text}');
-      await _channel.invokeMethod('initMqtt', {'phoneId': _phoneIdController.text});
-      if (mounted) {
-        setState(() {
-          _status = 'initMqtt called: ${_phoneIdController.text}';
-        });
-      }
-    } catch (e) {
-      log('[Flutter] initMqtt error: $e');
-      if (mounted) {
-        setState(() {
-          _status = 'Error: $e';
-        });
-      }
-    }
-  }
-
   Future<void> _setDevP2p() async {
     if (_isDisposed) return;
     
@@ -287,7 +268,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     if (_isDisposed) return;
     try {
       log('[Flutter] 一键启动开始');
-      await _initMqtt();
       await _setDevP2p();
       setState(() { _videoStarted = true; }); // 先显示AndroidView
       // AndroidView创建后会自动回调onPlatformViewCreated
@@ -353,7 +333,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
     }
     _devIdController.dispose();
-    _phoneIdController.dispose();
     _releaseDecoder();
     super.dispose();
   }
@@ -369,23 +348,21 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _phoneIdController,
-                        decoration: const InputDecoration(labelText: 'Phone ID'),
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: TextField(
-                        controller: _devIdController,
-                        decoration: const InputDecoration(labelText: 'Device ID'),
-                      ),
-                    ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.device_hub, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      const Text('设备ID: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text(widget.devId, style: const TextStyle(fontSize: 16)),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 20),
                 Text('Status: $_status'),
@@ -395,10 +372,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                   runSpacing: 8,
                   alignment: WrapAlignment.center,
                   children: [
-                    ElevatedButton(
-                      onPressed: _initMqtt,
-                      child: const Text('Init MQTT'),
-                    ),
                     ElevatedButton(
                       onPressed: _setDevP2p,
                       child: const Text('Set DevP2p'),

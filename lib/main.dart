@@ -8,12 +8,18 @@ import 'providers/theme_provider.dart';
 import 'utils/app_routes.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
+import 'services/app_lifecycle_service.dart';
+import 'services/mqtt_service.dart';
 
 import 'pages/p2p_video_main_page.dart';
 
 void main() async {
   // Ensure that Flutter bindings are initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化服务
+  await MqttService.instance.init();
+  await AppLifecycleService.instance.init();
 
   // Create providers
   final authProvider = AuthProvider();
