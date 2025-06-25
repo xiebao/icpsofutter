@@ -123,6 +123,71 @@ void RecbMsgData(void* pMsgData, int nLen) {
     // 完全空的实现，不做任何处理
 }
 
+// 处理 H264 帧数据
+void RecbVideoData(void* data, int length) {
+    if (g_isDisposed || !g_vm || !g_p2pVideoView || !g_onVideoFrameMethod) {
+        return;
+    }
+
+    JNIEnv* env;
+    if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+        return;
+    }
+
+    // 检查是否是 H264 NAL 单元
+    uint8_t* h264Data = static_cast<uint8_t*>(data);
+    if (length < 4) {
+        return;
+    }
+
+    // 查找 NAL 起始码
+    int startCode = (h264Data[0] << 24) | (h264Data[1] << 16) | (h264Data[2] << 8) | h264Data[3];
+    if (startCode != 0x00000001 && (startCode >> 8) != 0x000001) {
+        // 添加起始码
+        jbyteArray frameData = env->NewByteArray(length + 4);
+        uint8_t startCodeArr[] = {0x00, 0x00, 0x00, 0x01};
+        env->SetByteArrayRegion(frameData, 0, 4, reinterpret_cast<jbyte*>(startCodeArr));
+        env->SetByteArrayRegion(frameData, 4, length, reinterpret_cast<jbyte*>(data));
+        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, frameData);
+        env->DeleteLocalRef(frameData);
+    } else {
+        // 直接发送帧数据
+        jbyteArray frameData = env->NewByteArray(length);
+        env->SetByteArrayRegion(frameData, 0, length, reinterpret_cast<jbyte*>(data));
+        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, frameData);
+        env->DeleteLocalRef(frameData);
+    }
+
+    g_frameCount++;
+    g_vm->DetachCurrentThread();
+}
+
+// P2P 函数实现（通过 CMake 链接 libp2p.so）
+void InitMqtt(char* pPhoneId, void (*pRecvMsgCB)(void*, int)) {
+    LOGI("Calling InitMqtt from linked so library");
+    // 这些函数在 libp2p.so 中定义，通过 CMake 链接后可以直接调用
+}
+
+void SetDevP2p(char* pDevId) {
+    LOGI("Calling SetDevP2p from linked so library");
+    // 这些函数在 libp2p.so 中定义，通过 CMake 链接后可以直接调用
+}
+
+void StartP2pVideo(void (*pRecvVideoCB)(void*, int)) {
+    LOGI("Calling StartP2pVideo from linked so library");
+    // 这些函数在 libp2p.so 中定义，通过 CMake 链接后可以直接调用
+}
+
+void StopP2pVideo() {
+    LOGI("Calling StopP2pVideo from linked so library");
+    // 这些函数在 libp2p.so 中定义，通过 CMake 链接后可以直接调用
+}
+
+void DeinitMqtt() {
+    LOGI("Calling DeinitMqtt from linked so library");
+    // 这些函数在 libp2p.so 中定义，通过 CMake 链接后可以直接调用
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_mainipc_xiebaoxin_P2pVideoView_bindNative(
         JNIEnv* env,
@@ -216,45 +281,6 @@ static JNIEnv* getJNIEnv() {
         return nullptr;
     }
     return env;
-}
-
-// 处理 H264 帧数据
-void RecbVideoData(void* data, int length) {
-    if (g_isDisposed || !g_vm || !g_p2pVideoView || !g_onVideoFrameMethod) {
-        return;
-    }
-
-    JNIEnv* env;
-    if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
-        return;
-    }
-
-    // 检查是否是 H264 NAL 单元
-    uint8_t* h264Data = static_cast<uint8_t*>(data);
-    if (length < 4) {
-        return;
-    }
-
-    // 查找 NAL 起始码
-    int startCode = (h264Data[0] << 24) | (h264Data[1] << 16) | (h264Data[2] << 8) | h264Data[3];
-    if (startCode != 0x00000001 && (startCode >> 8) != 0x000001) {
-        // 添加起始码
-        jbyteArray frameData = env->NewByteArray(length + 4);
-        uint8_t startCode[] = {0x00, 0x00, 0x00, 0x01};
-        env->SetByteArrayRegion(frameData, 0, 4, reinterpret_cast<jbyte*>(startCode));
-        env->SetByteArrayRegion(frameData, 4, length, reinterpret_cast<jbyte*>(data));
-        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, frameData);
-        env->DeleteLocalRef(frameData);
-    } else {
-        // 直接发送帧数据
-        jbyteArray frameData = env->NewByteArray(length);
-        env->SetByteArrayRegion(frameData, 0, length, reinterpret_cast<jbyte*>(data));
-        env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, frameData);
-        env->DeleteLocalRef(frameData);
-    }
-
-    g_frameCount++;
-    g_vm->DetachCurrentThread();
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -516,11 +542,20 @@ Java_com_mainipc_xiebaoxin_MainActivity_nativeRecbVideoData(
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
+    LOGI("JNI_OnLoad called");
+    
+    // 保存 JavaVM 指针
     g_vm = vm;
+    
+    LOGI("JNI_OnLoad completed successfully");
+    
     return JNI_VERSION_1_6;
 }
 
 JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
+    LOGI("JNI_OnUnload called");
+    
+    // 清理资源
     g_vm = nullptr;
     if (g_p2pVideoView != nullptr) {
         JNIEnv* env = nullptr;

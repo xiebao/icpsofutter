@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_provider.dart';
 import '../utils/app_routes.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
   @override

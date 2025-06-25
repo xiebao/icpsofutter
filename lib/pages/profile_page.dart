@@ -4,7 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../auth/auth_provider.dart';
 import '../utils/app_routes.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 
 class ProfilePage extends StatefulWidget {
   @override

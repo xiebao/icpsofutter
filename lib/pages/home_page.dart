@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_provider.dart';
 import '../utils/app_routes.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 import 'profile_page.dart';
 import 'p2p_video_main_page.dart';
+import 'cloud_storage_page.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -15,6 +16,7 @@ class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   final List<Widget> _children = [
     HomeContent(), // Main content for home
+    CloudStoragePage(), // 新增云存页面
     ProfilePage(), // User profile page
   ];
 
@@ -36,6 +38,10 @@ class _HomePageState extends State<HomePage> {
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: l10n.home,
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.cloud),
+            label: '云存',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
@@ -77,20 +83,8 @@ class HomeContent extends StatelessWidget {
             Text('This is the main content for music scores.'),
             Text('You can start building your features here.'),
             SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pushNamed('/p2p_video_test');
-              },
-              child: Text('P2P视频测试'),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pushNamed('/p2p_video');
-              },
-              child: Text('摄像头测试'),
-            ),
-            SizedBox(height: 20),
+       
+        
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pushNamed('/p2p_video_main');

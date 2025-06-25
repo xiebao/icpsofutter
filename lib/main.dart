@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 
 import 'auth/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'utils/app_routes.dart';
 import 'pages/login_page.dart';
 import 'pages/home_page.dart';
-import 'pages/p2p_video_test_page.dart';
-import 'pages/p2p_video_page.dart';
+
 import 'pages/p2p_video_main_page.dart';
 
 void main() async {
@@ -74,9 +73,7 @@ class MyApp extends StatelessWidget {
       // --- Routing Setup ---
       routes: {
         ...AppRoutes.routes..remove('/'),
-        '/p2p_video_test': (context) => const P2pVideoTestPage(),
-        '/p2p_video': (context) => const P2pVideoPage(),
-      },
+    },
 
       // --- Home Screen Logic ---
       // If user is authenticated, show HomePage, otherwise show LoginPage.

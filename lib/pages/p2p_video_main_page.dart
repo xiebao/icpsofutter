@@ -20,7 +20,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   final TextEditingController _devIdController = TextEditingController(text: 'camId123');
   final TextEditingController _phoneIdController = TextEditingController(text: 'phoneId123');
   bool _videoStarted = false;
-  bool _videoStreamAvailable = false;  // 视频流状态
   int _decodeMode = 0; // 默认使用硬解(MediaCodec)
   int _displayMode = 1; // 默认使用Texture模式
   bool _isDisposed = false;
@@ -44,22 +43,14 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         timer.cancel();
         return;
       }
-      if (_videoStarted) {
-        if (_lastFrameTime != null) {
-          final now = DateTime.now();
-          final diff = now.difference(_lastFrameTime!);
-          if (diff.inSeconds > 2 && _videoStreamAvailable) {
-            setState(() {
-              _videoStreamAvailable = false;
-              _statusDetail = '超过2秒未收到视频帧，红点变红';
-            });
-            log('[Flutter] 超过2秒未收到视频帧，红点变红');
-          }
-        } else if (!_videoStreamAvailable) {
+      if (_videoStarted && _lastFrameTime != null) {
+        final now = DateTime.now();
+        final diff = now.difference(_lastFrameTime!);
+        if (diff.inSeconds > 2 && _statusDetail.contains('已接收')) {
           setState(() {
-            _videoStreamAvailable = false;
-            _statusDetail = '尚未收到视频流，红点为红';
+            _statusDetail = '超过2秒未收到视频帧，红点变红';
           });
+          log('[Flutter] setState: 超过2秒未收到视频帧，_statusDetail=$_statusDetail');
         }
       }
     });
@@ -67,16 +58,16 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     _videoChannel.setMethodCallHandler((call) async {
       if (call.method == 'onVideoFrame') {
         final Uint8List h264Frame = call.arguments;
-        print('[Flutter] onVideoFrame received, len=${h264Frame.length}');
+        // 先刷新时间
+        _lastFrameTime = DateTime.now();
         // 只要收到帧，立即变绿
-        if (!_videoStreamAvailable) {
+        if (!_statusDetail.contains('已接收')) {
           setState(() {
-            _videoStreamAvailable = true;
             _statusDetail = '收到视频帧，红点变绿';
           });
-          log('[Flutter] 收到 onVideoFrame，红点变绿');
+          log('[Flutter] setState: onVideoFrame, _statusDetail=$_statusDetail');
         }
-        _lastFrameTime = DateTime.now();
+        // 后续异步操作
         if (!_decoderInitialized || _decoderSource != 'p2p') {
           await _initDecoder(640, 480, source: 'p2p');
           setState(() { _statusDetail = '收到onVideoFrame, 初始化解码器'; });
@@ -86,7 +77,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
           'pts': DateTime.now().millisecondsSinceEpoch,
           'source': 'p2p',
         });
-        print('[Flutter] queueH264 called (p2p), len=${h264Frame.length}');
         setState(() { _statusDetail = 'queueH264已调用(p2p), len=${h264Frame.length}'; });
       }
     });
@@ -130,8 +120,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
             // 更新视频流状态
             if (mounted) {
               setState(() {
-                _videoStreamAvailable = true;
-                _lastFrameTime = DateTime.now();
+                _statusDetail = '收到视频帧，红点变绿';
               });
             }
             
@@ -154,7 +143,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
           final errorMsg = call.arguments['message'] as String;
           setState(() {
             _status = 'Error: $errorMsg';
-            _videoStreamAvailable = false;
           });
           
           // 检查是否是硬解错误
@@ -269,7 +257,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       if (mounted) {
         setState(() {
           _status = 'stopped';
-          _videoStreamAvailable = false;
           _lastFrameTime = null;
           _statusDetail = '已停止视频流，红点为红';
         });
@@ -443,7 +430,9 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                 const SizedBox(height: 24),
                 Row(children: [
                   const Text('视频流显示区：'),
-                  _videoStreamAvailable ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
+                  _statusDetail.contains('已接收')
+                    ? const Icon(Icons.circle, color: Colors.green)
+                    : const Icon(Icons.circle, color: Colors.red),
                   const SizedBox(width: 8),
                   Expanded(child: Text(_statusDetail, style: TextStyle(fontSize: 12, color: Colors.blueGrey))),
                 ],),
@@ -471,7 +460,6 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                         await _videoChannel.invokeMethod('stopCameraH264Stream');
                         setState(() {
                           // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
-                          _videoStreamAvailable = false;
                           _statusDetail = '停止摄像头H264推流';
                         });
                       },

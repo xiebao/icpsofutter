@@ -19,3 +19,15 @@ samples, guidance on mobile development, and a full API reference.
 摄像头先模拟264视频流给RecbVideoData进行测试。
             摄像头采集 -> H264编码 ->    RecbVideoData回调 -> 解码 -> Texture显示。
 原生so库的调用：initMqtt->setDevP2p-> startP2pVideo ->   RecbVideoData回调 -> 解码 -> Texture
+
++----------------+       +-------------------+       +-----------------------+       +-----------------+
+| Flutter (Dart) | <---> | Platform Channels | <---> | Android (Kotlin/Java) | <---> | JNI Interface   | <---> | C Library (.so) |
+|                |       |                   |       |      (Native Code)    |       | (C/C++ .cpp/.c) |       | (Actual logic)  |
++----------------+       +-------------------+       +-----------------------+       +-----------------+
+  invokeMethod()             MethodChannel              `external fun` methods   `JNIEXPORT JNICALL` functions
+  receive result             setMethodCallHandler       `System.loadLibrary()`   call your_c_lib.h functions
+
+
+NDK 必须用 26.3.11579264
+CMake 用 3.22.1
+build.gradle 里 ndkVersion、externalNativeBuild、abiFilters、arguments 必须和 IDE 配置一致
