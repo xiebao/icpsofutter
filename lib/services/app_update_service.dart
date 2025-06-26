@@ -55,16 +55,16 @@ class AppUpdateService {
   // 模拟API响应数据
   Map<String, dynamic> _mockApiResponse = {
     'android': {
-      'version': '1.0.2',
-      'buildNumber': '3',
+      'version': '1.0.0',
+      'buildNumber': '1',
       'downloadUrl': 'https://example.com/app-release.apk',
       'description': '修复了一些bug，提升了应用性能，新增了重要功能',
       'updateType': 'optional',
       'forceUpdate': false,
     },
     'ios': {
-      'version': '1.0.2',
-      'buildNumber': '3',
+      'version': '1.0.0',
+      'buildNumber': '1',
       'downloadUrl': 'https://apps.apple.com/app/id123456789',
       'description': '修复了一些bug，提升了应用性能，新增了重要功能',
       'updateType': 'optional',

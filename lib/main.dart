@@ -78,7 +78,7 @@ class MyApp extends StatelessWidget {
 
       // --- Routing Setup ---
       routes: {
-        ...?AppRouter.routes,
+        ...AppRouter.routes,
       },
       onGenerateRoute: AppRouter.onGenerateRoute,
 

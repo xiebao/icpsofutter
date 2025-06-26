@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:network_info_plus/network_info_plus.dart';
-import 'package:wifi_iot/wifi_iot.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:network_info_plus/network_info_plus.dart';
 
+// WiFi配置信息类
 class WifiConfigInfo {
   final String ssid;
   final String password;
-  final String securityType; // WPA, WEP, OPEN
+  final String securityType;
   final String? ipAddress;
   final String? gateway;
   final String? subnetMask;
@@ -23,31 +22,27 @@ class WifiConfigInfo {
     this.subnetMask,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
+  // 转换为JSON格式的二维码数据
+  String toQrCodeData() {
+    Map<String, dynamic> data = {
       'ssid': ssid,
       'password': password,
-      'securityType': securityType,
-      'ipAddress': ipAddress,
-      'gateway': gateway,
-      'subnetMask': subnetMask,
+      'security': securityType,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
+    return jsonEncode(data);
   }
 
+  // 从JSON数据创建WifiConfigInfo
   factory WifiConfigInfo.fromJson(Map<String, dynamic> json) {
     return WifiConfigInfo(
       ssid: json['ssid'] ?? '',
       password: json['password'] ?? '',
-      securityType: json['securityType'] ?? 'WPA',
-      ipAddress: json['ipAddress'],
+      securityType: json['security'] ?? 'WPA',
+      ipAddress: json['ip'],
       gateway: json['gateway'],
-      subnetMask: json['subnetMask'],
+      subnetMask: json['subnet'],
     );
-  }
-
-  String toQrCodeData() {
-    return jsonEncode(toJson());
   }
 }
 
@@ -57,7 +52,6 @@ class WifiConfigService {
   WifiConfigService._internal();
 
   final NetworkInfo _networkInfo = NetworkInfo();
-  final WifiIoT _wifiIoT = WifiIoT();
 
   // 检查并请求权限
   Future<bool> requestPermissions() async {
@@ -65,8 +59,6 @@ class WifiConfigService {
       Permission.location,
       Permission.locationWhenInUse,
       Permission.locationAlways,
-      if (Platform.isAndroid) Permission.accessFineLocation,
-      if (Platform.isAndroid) Permission.accessCoarseLocation,
     ].request();
 
     bool allGranted = true;
@@ -89,12 +81,7 @@ class WifiConfigService {
       }
 
       // 获取当前WiFi SSID
-      String? ssid;
-      if (Platform.isAndroid) {
-        ssid = await _wifiIoT.getSSID();
-      } else {
-        ssid = await _networkInfo.getWifiName();
-      }
+      String? ssid = await _networkInfo.getWifiName();
 
       if (ssid == null || ssid.isEmpty) {
         debugPrint('Could not get WiFi SSID');
@@ -124,36 +111,6 @@ class WifiConfigService {
     } catch (e) {
       debugPrint('Error getting WiFi info: $e');
       return null;
-    }
-  }
-
-  // 获取可用的WiFi网络列表
-  Future<List<WifiNetwork>> getAvailableNetworks() async {
-    try {
-      if (!await requestPermissions()) {
-        return [];
-      }
-
-      List<WifiNetwork> networks = await _wifiIoT.loadWifiList();
-      return networks;
-    } catch (e) {
-      debugPrint('Error getting available networks: $e');
-      return [];
-    }
-  }
-
-  // 连接到指定的WiFi网络
-  Future<bool> connectToWifi(String ssid, String password, {String security = 'WPA'}) async {
-    try {
-      if (!await requestPermissions()) {
-        return false;
-      }
-
-      bool result = await _wifiIoT.connect(ssid, password: password, security: security);
-      return result;
-    } catch (e) {
-      debugPrint('Error connecting to WiFi: $e');
-      return false;
     }
   }
 

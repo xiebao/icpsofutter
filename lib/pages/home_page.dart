@@ -40,15 +40,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _addDevice() {
-    // TODO: 跳转到添加设备流程
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('添加设备'),
-        content: Text('这里可以实现添加设备的流程。'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('关闭'))],
-      ),
-    );
+    Navigator.of(context).pushNamed('/wifi_config');
+    return;
+    // // TODO: 跳转到添加设备流程
+    // showDialog(
+    //   context: context,
+    //   builder: (_) => AlertDialog(
+    //     title: Text('添加设备'),
+    //     content: Text('这里可以实现添加设备的流程。'),
+    //     actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('关闭'))],
+    //   ),
+    // );
   }
 
   @override
@@ -75,6 +77,13 @@ class _HomePageState extends State<HomePage> {
             tooltip: '添加设备',
             onPressed: _addDevice,
           ),
+          // IconButton(
+          //   icon: Icon(Icons.wifi, color: colorScheme.primary),
+          //   tooltip: 'WiFi配网',
+          //   onPressed: () {
+          //     Navigator.of(context).pushNamed('/wifi_config');
+          //   },
+          // ),
           IconButton(
             icon: Icon(Icons.system_update, color: colorScheme.primary),
             tooltip: '升级测试',

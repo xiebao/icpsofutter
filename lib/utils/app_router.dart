@@ -8,6 +8,7 @@ import '../pages/privacy_policy_page.dart';
 import '../pages/device_settings_page.dart';
 import '../pages/p2p_video_simple_page.dart';
 import '../pages/test_update_page.dart';
+import '../pages/wifi_config_page.dart';
 
 class AppRouter {
   static const String root = '/';
@@ -18,6 +19,7 @@ class AppRouter {
   static const String privacy = '/privacy';
   static const String p2pVideoSimple = '/p2p_video_simple';
   static const String testUpdate = '/test_update';
+  static const String wifiConfig = '/wifi_config';
   // 需要参数的页面不在routes里注册
 
   static final Map<String, WidgetBuilder> routes = {
@@ -29,6 +31,7 @@ class AppRouter {
     privacy: (context) => PrivacyPolicyPage(),
     p2pVideoSimple: (context) => P2pVideoSimplePage(devId: '', deviceName: ''),
     testUpdate: (context) => TestUpdatePage(),
+    wifiConfig: (context) => WifiConfigPage(),
   };
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
