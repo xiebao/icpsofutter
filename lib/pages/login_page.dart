@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_provider.dart';
-import '../utils/app_routes.dart';
+import '../utils/app_router.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 
 class LoginPage extends StatefulWidget {
@@ -31,7 +31,7 @@ class _LoginPageState extends State<LoginPage> {
         });
 
         if (success) {
-          Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+          Navigator.of(context).pushReplacementNamed(AppRouter.home);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(AppLocalizations.of(context)!.loginFailed)),
@@ -82,7 +82,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: Text(l10n.dontHaveAccount),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pushNamed(AppRoutes.privacy),
+                  onPressed: () => Navigator.of(context).pushNamed(AppRouter.privacy),
                   child: Text(l10n.privacyPolicy),
                 )
               ],

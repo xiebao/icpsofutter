@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../auth/auth_provider.dart';
-import '../utils/app_routes.dart';
+import '../utils/app_router.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -53,7 +53,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Text(l10n.pleaseLogin),
             SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pushReplacementNamed(AppRoutes.login),
+              onPressed: () => Navigator.of(context).pushReplacementNamed(AppRouter.login),
               child: Text(l10n.login),
             ),
           ],
@@ -102,7 +102,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ListTile(
             leading: Icon(Icons.settings),
             title: Text(l10n.settings),
-            onTap: () => Navigator.of(context).pushNamed(AppRoutes.settings),
+            onTap: () => Navigator.of(context).pushNamed(AppRouter.settings),
           ),
           ListTile(
             leading: Icon(Icons.cleaning_services),
@@ -112,7 +112,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ListTile(
             leading: Icon(Icons.privacy_tip),
             title: Text(l10n.privacyPolicy),
-            onTap: () => Navigator.of(context).pushNamed(AppRoutes.privacy),
+            onTap: () => Navigator.of(context).pushNamed(AppRouter.privacy),
           ),
           SizedBox(height: 40),
           Padding(
@@ -123,7 +123,7 @@ class _ProfilePageState extends State<ProfilePage> {
               onPressed: () {
                 Provider.of<AuthProvider>(context, listen: false).logout();
                 // After logout, push to login and remove all previous routes
-                Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+                Navigator.of(context).pushNamedAndRemoveUntil(AppRouter.login, (route) => false);
               },
             ),
           ),

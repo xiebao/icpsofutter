@@ -258,6 +258,7 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                   const Text('Version: 1.0.0'),
                   const Text('视频流状态：'),
                   _statusDetail.contains('已接收') ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
                       ],

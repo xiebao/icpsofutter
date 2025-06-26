@@ -5,14 +5,11 @@ import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 
 import 'auth/auth_provider.dart';
 import 'providers/theme_provider.dart';
-import 'utils/app_routes.dart';
+import 'utils/app_router.dart';
 import 'pages/login_page.dart';
 import 'pages/root_page.dart';
 import 'services/app_lifecycle_service.dart';
 import 'services/mqtt_service.dart';
-
-import 'pages/p2p_video_main_page.dart';
-import 'pages/device_settings_page.dart';
 
 void main() async {
   // Ensure that Flutter bindings are initialized
@@ -81,29 +78,13 @@ class MyApp extends StatelessWidget {
 
       // --- Routing Setup ---
       routes: {
-        ...AppRoutes.routes..remove('/'),
+        ...?AppRouter.routes,
       },
-      onGenerateRoute: (settings) {
-        if (settings.name == '/device_settings') {
-          final args = settings.arguments;
-          String devId = '';
-          String deviceName = '';
-          if (args is Map) {
-            devId = args['devId'] ?? '';
-            deviceName = args['deviceName'] ?? '';
-          } else if (args is String) {
-            devId = args;
-          }
-          return MaterialPageRoute(
-            builder: (_) => DeviceSettingsPage(devId: devId, deviceName: deviceName),
-          );
-        }
-        return null;
-      },
+      onGenerateRoute: AppRouter.onGenerateRoute,
 
       // --- Home Screen Logic ---
       // If user is authenticated, show HomePage, otherwise show LoginPage.
-      home: authProvider.isAuthenticated ? RootPage() : LoginPage(),
+      initialRoute: authProvider.isAuthenticated ? AppRouter.root : AppRouter.login,
     );
   }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_provider.dart';
-import '../utils/app_routes.dart';
+import '../utils/app_router.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 import 'profile_page.dart';
 import 'p2p_video_main_page.dart';
 import 'p2p_video_simple_page.dart';
 import 'cloud_storage_page.dart';
+import 'test_update_page.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -73,6 +74,13 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.add, color: colorScheme.primary),
             tooltip: '添加设备',
             onPressed: _addDevice,
+          ),
+          IconButton(
+            icon: Icon(Icons.system_update, color: colorScheme.primary),
+            tooltip: '升级测试',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/test_update');
+            },
           ),
         ],
       ),
