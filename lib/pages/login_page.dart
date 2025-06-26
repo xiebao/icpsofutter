@@ -55,7 +55,7 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 TextFormField(
-                  decoration: InputDecoration(labelText: l10n.email),
+                  decoration: InputDecoration(labelText: l10n.username),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) => value!.isEmpty ? l10n.emailRequired : null,
                   onSaved: (value) => _email = value!,

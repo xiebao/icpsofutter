@@ -27,15 +27,17 @@ class AuthProvider with ChangeNotifier {
       _isAuthenticated = true;
       // You can also fetch user profile here if needed
       // For now, we'll just set a placeholder user
-      _user = User(id: '1', name: 'Cached User', email: 'user@123.com');
       DioClient.setAuthToken(_token!);
-      
+     
       // 初始化 MQTT 服务
       await _mqttService.init();
       
       // 如果有缓存的用户ID，启动 MQTT 连接
       final userId = prefs.getString('userid');
       if (userId != null) {
+        // final response = await DioClient.instance.get('/user/info');
+        // _user = User.fromJson(response.data);
+        _user = User(id: '1', name: 'Cached User', email: 'user@123.com', userid: userId, phone: '1234567890');
         log('[AuthProvider] 检测到缓存的用户ID: $userId，启动 MQTT 连接');
         await _mqttService.startMqtt(userId);
         await _appLifecycleService.updateCurrentUserId(userId);
@@ -44,22 +46,21 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String username, String password) async {
     // 本地Mock账号（开发调试用）
-    if (email == 'phoneId123' && password == '123') {
-    // if (email == 'test@123.com' && password == '123456') {
+    if (username == 'phoneId123' && password == '123') {
       _token = 'mock_token';
-      _user = User(id: '1', name: '测试用户', email: email, avatarUrl: null);
+      _user = User(id: '1', name: 'Test User', email: 'phoneId123', userid: username, phone: '1234567890');
       _isAuthenticated = true;
       
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('jwt_token', _token!);
-      await prefs.setString('userid', email); // 保存用户ID用于MQTT
+      await prefs.setString('userid', username); // 保存用户ID用于MQTT
       
       // 初始化 MQTT 服务并启动连接
       await _mqttService.init();
-      await _mqttService.startMqtt(email);
-      await _appLifecycleService.updateCurrentUserId(email);
+      await _mqttService.startMqtt(username);
+      await _appLifecycleService.updateCurrentUserId(username);
       
       notifyListeners();
       return true;
@@ -67,7 +68,7 @@ class AuthProvider with ChangeNotifier {
     try {
       // IMPORTANT: Replace with your actual login API endpoint
       final response = await DioClient.instance.post('/auth/login', data: {
-        'email': email,
+        'username': username,
         'password': password,
       });
 
@@ -80,12 +81,12 @@ class AuthProvider with ChangeNotifier {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', _token!);
-        await prefs.setString('userid', email); // 保存用户ID用于MQTT
+        await prefs.setString('userid', _user!.userid!); // 保存用户ID用于MQTT
         
         // 初始化 MQTT 服务并启动连接
         await _mqttService.init();
-        await _mqttService.startMqtt(email);
-        await _appLifecycleService.updateCurrentUserId(email);
+        await _mqttService.startMqtt(_user!.userid!);
+        await _appLifecycleService.updateCurrentUserId(_user!.userid!);
         
         notifyListeners();
         return true;

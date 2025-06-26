@@ -7,6 +7,7 @@ class AppLifecycleService with WidgetsBindingObserver {
   static AppLifecycleService? _instance;
   final MqttService _mqttService = MqttService.instance;
   String? _currentUserId;
+  static bool _initialized = false;
 
   // 单例模式
   factory AppLifecycleService() {
@@ -21,15 +22,12 @@ class AppLifecycleService with WidgetsBindingObserver {
 
   // 初始化服务
   Future<void> init() async {
+    if (_initialized) return;
+    _initialized = true;
     log('[AppLifecycleService] 初始化应用生命周期服务');
-    
-    // 注册生命周期观察者
     WidgetsBinding.instance.addObserver(this);
-    
-    // 获取当前用户ID
     final prefs = await SharedPreferences.getInstance();
     _currentUserId = prefs.getString('userid');
-    
     log('[AppLifecycleService] 当前用户ID: $_currentUserId');
   }
 
@@ -37,12 +35,11 @@ class AppLifecycleService with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+    log('[AppLifecycleService] didChangeAppLifecycleState: $state');
     if (_currentUserId == null) {
       log('[AppLifecycleService] 用户未登录，跳过生命周期处理');
       return;
     }
-
     switch (state) {
       case AppLifecycleState.resumed:
         log('[AppLifecycleService] 应用进入前台');
@@ -69,9 +66,8 @@ class AppLifecycleService with WidgetsBindingObserver {
   Future<void> updateCurrentUserId(String userId) async {
     _currentUserId = userId;
     log('[AppLifecycleService] 更新当前用户ID: $userId');
-    
-    // 如果应用当前处于前台，立即启动 MQTT
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      log('[AppLifecycleService] 当前为前台，立即启动MQTT');
       await _mqttService.onAppResumed(userId);
     }
   }

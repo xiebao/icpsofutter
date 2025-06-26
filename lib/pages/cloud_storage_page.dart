@@ -142,7 +142,7 @@ class _CloudStoragePageState extends State<CloudStoragePage> {
                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                     if (_plans[_selectedIndex]['oldPrice'] != null)
                       Text('${_plans[_selectedIndex]['oldPrice']}', 
-                           style: TextStyle(fontSize: 16, color: Colors.white70, decoration: TextDecoration.lineThrough)),
+                           style: TextStyle(fontSize: 16, color: Colors.white70, decoration: TextDecoration.lineThrough, decorationColor: Colors.grey)),
                     SizedBox(width: 12),
                     Container(
                       padding: EdgeInsets.symmetric(horizontal: 18, vertical: 8),
@@ -203,40 +203,46 @@ class _CloudStoragePageState extends State<CloudStoragePage> {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (highlight && save != null)
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(6),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (highlight && save != null)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text('限时随机立减', style: TextStyle(color: gradient[0], fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
-                child: Text('限时随机立减', style: TextStyle(color: gradient[0], fontSize: 12, fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text(desc, style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+              SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(price, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis),
+                  ),
+                  if (oldPrice != null) ...[
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(oldPrice, style: TextStyle(fontSize: 16, color: Colors.white70, decoration: TextDecoration.lineThrough, decorationColor: Colors.grey), overflow: TextOverflow.ellipsis),
+                    ),
+                  ]
+                ],
               ),
-            SizedBox(height: 8),
-            Text(desc, style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600)),
-            SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(price, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-                if (oldPrice != null) ...[
-                  SizedBox(width: 6),
-                  Text(oldPrice, style: TextStyle(fontSize: 16, color: Colors.white70, decoration: TextDecoration.lineThrough)),
-                ]
-              ],
-            ),
-            if (save != null)
-              Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: Text(save, style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500)),
-              ),
-            SizedBox(height: 8),
-            Text(title, style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
+              if (save != null)
+                Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Text(save, style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              SizedBox(height: 8),
+              Text(title, style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
         ),
       ),
     );

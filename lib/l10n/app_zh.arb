@@ -6,6 +6,7 @@
     "login": "登录",
     "logout": "退出登录",
     "email": "邮箱",
+    "username":"用户名",
     "password": "密码",
     "emailRequired": "请输入邮箱",
     "passwordRequired": "请输入密码",

@@ -197,28 +197,25 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: AppBar(
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: colorScheme.primary),
+            icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.deviceName, style: theme.textTheme.titleLarge),
-              Text(_bitrate, style: theme.textTheme.bodySmall?.copyWith(color: textColor.withOpacity(0.7))),
+              Text(widget.deviceName, style: const TextStyle(fontSize: 18)),
+              Text(_bitrate, style: const TextStyle(fontSize: 12)),
             ],
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.settings, color: colorScheme.primary),
+              icon: const Icon(Icons.settings),
               onPressed: () {
                 Navigator.pushNamed(
                   context,
@@ -250,36 +247,49 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
                       creationParamsCodec: const StandardMessageCodec(),
                     )
                   : Container(
-                      color: colorScheme.surfaceVariant,
+                      color: Colors.black12,
                       alignment: Alignment.center,
-                      child: Text('没有启动视频流', style: theme.textTheme.bodyMedium?.copyWith(color: textColor.withOpacity(0.5))),
+                      child: const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
                     ),
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('视频流状态：', style: theme.textTheme.bodyMedium?.copyWith(color: textColor)),
-                _statusDetail.contains('已接收')
-                    ? Icon(Icons.circle, color: Colors.green)
-                    : Icon(Icons.circle, color: Colors.red),
-                const SizedBox(width: 8),
-                Text(_statusDetail, style: theme.textTheme.bodySmall?.copyWith(color: textColor.withOpacity(0.7))),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('视频流状态：'),
+                  _statusDetail.contains('已接收') ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
+                      ],
+              ),
             ),
             const SizedBox(height: 24),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _BottomIconButton(icon: Icons.power_settings_new, label: '', color: colorScheme.primary),
-                  _BottomIconButton(icon: Icons.volume_off, label: '', color: colorScheme.primary),
-                  _BottomIconButton(icon: Icons.cut, label: '', color: colorScheme.primary),
-                  _BottomIconButton(icon: Icons.videocam, label: '', color: colorScheme.primary),
-                  _BottomIconButton(icon: null, label: '自动', color: colorScheme.primary),
-                  _BottomIconButton(icon: Icons.open_in_full, label: '', color: colorScheme.primary),
-                ],
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child:  Text(_statusDetail, style: const TextStyle(fontSize: 12)),  
+              
+            ),
+            
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child:
+               SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child:Container(
+                  width: MediaQuery.of(context).size.width,
+                child:  Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _BottomIconButton(icon: Icons.power_settings_new, label: ''),
+                    _BottomIconButton(icon: Icons.volume_off, label: ''),
+                    _BottomIconButton(icon: Icons.cut, label: ''),
+                    _BottomIconButton(icon: Icons.videocam, label: ''),
+                    _BottomIconButton(icon: Icons.auto_mode, label: ''),
+                    _BottomIconButton(icon: Icons.open_in_full, label: ''),
+                  ],
+                ),
+              ),
               ),
             ),
           ],
@@ -292,19 +302,16 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
 class _BottomIconButton extends StatelessWidget {
   final IconData? icon;
   final String label;
-  final Color? color;
-  const _BottomIconButton({this.icon, required this.label, this.color});
+  const _BottomIconButton({this.icon, required this.label});
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = color ?? theme.colorScheme.primary;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null)
-          Icon(icon, color: textColor, size: 30)
+          Icon(icon, size: 24,color: Colors.grey,)
         else
-          Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: textColor, fontSize: 16)),
+          Text(label, style: TextStyle(fontSize: 16)),
       ],
     );
   }

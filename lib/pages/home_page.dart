@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
         elevation: 0,
         title: Row(
           children: [
-            Icon(Icons.home),
+            Icon(Icons.home, color: colorScheme.primary),
             const SizedBox(width: 8),
             Text('我的家庭', style: theme.textTheme.titleLarge),
             const SizedBox(width: 8),
@@ -89,7 +89,7 @@ class _HomePageState extends State<HomePage> {
                 _RoomTab(text: '未分配房间', textColor: textColor),
                 const Spacer(),
                           IconButton(
-            icon: Icon(_isGrid ? Icons.view_agenda : Icons.grid_view, color:  colorScheme.onSurface.withOpacity(0.38)),
+            icon: Icon(_isGrid ? Icons.view_agenda_outlined : Icons.grid_view_outlined, color: colorScheme.primary.withOpacity(0.74)),
             tooltip: _isGrid ? '切换为单列' : '切换为双列',
             onPressed: () {
               setState(() {
@@ -211,7 +211,7 @@ class _DeviceCard extends StatelessWidget {
     IconData iconData = Icons.devices_other;
     if (type == 'camera') iconData = Icons.videocam;
     if (type == 'tv') iconData = Icons.tv;
-    final cardHeight = isGrid ? 160.0 : null;
+    final cardHeight = isGrid ? 170.0 : null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -222,11 +222,12 @@ class _DeviceCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorScheme.surface,
             borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: colorScheme.primary.withOpacity(0.18), width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.10),
-                blurRadius: 8,
-                offset: Offset(0, 4),
+                color: colorScheme.shadow.withOpacity(0.2),
+                blurRadius: 6,
+                offset: Offset(0, 2),
               ),
             ],
           ),

@@ -27,6 +27,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get email => '邮箱';
 
   @override
+  String get username => '用户名';
+
+  @override
   String get password => '密码';
 
   @override

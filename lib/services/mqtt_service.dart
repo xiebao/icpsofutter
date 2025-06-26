@@ -42,6 +42,7 @@ class MqttService {
 
   // 启动 MQTT 连接
   Future<bool> startMqtt(String userId) async {
+    log('[MQTT Service] startMqtt called for user: $userId');
     if (_isInitialized && _currentUserId == userId) {
       log('[MQTT Service] MQTT 已经为用户 $userId 初始化，跳过重复初始化');
       return true;
@@ -62,6 +63,7 @@ class MqttService {
 
   // 停止 MQTT 连接
   Future<void> stopMqtt() async {
+    log('[MQTT Service] stopMqtt called');
     if (!_isInitialized) {
       log('[MQTT Service] MQTT 未初始化，跳过停止操作');
       return;
@@ -80,7 +82,7 @@ class MqttService {
 
   // 应用进入前台
   Future<void> onAppResumed(String userId) async {
-    log('[MQTT Service] 应用进入前台，用户: $userId');
+    log('[MQTT Service] onAppResumed called, user: $userId');
     _isAppActive = true;
     
     if (!_isInitialized || _currentUserId != userId) {
@@ -92,17 +94,17 @@ class MqttService {
 
   // 应用进入后台
   Future<void> onAppPaused() async {
-    log('[MQTT Service] 应用进入后台');
+    log('[MQTT Service] onAppPaused called');
     _isAppActive = false;
     
     // 可以选择是否在后台停止 MQTT
     // 如果需要在后台保持连接，可以注释掉下面的代码
-    // await stopMqtt();
+    await stopMqtt();
   }
 
   // 应用被销毁
   Future<void> onAppDestroyed() async {
-    log('[MQTT Service] 应用被销毁，停止 MQTT 连接');
+    log('[MQTT Service] onAppDestroyed called');
     await stopMqtt();
   }
 

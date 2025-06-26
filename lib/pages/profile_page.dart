@@ -76,10 +76,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 radius: 50,
                 backgroundImage: _avatar != null
                     ? FileImage(_avatar!)
-                    : (authProvider.user?.avatarUrl != null
+                    : (authProvider.user != null && authProvider.user!.avatarUrl != null && authProvider.user!.avatarUrl!.isNotEmpty
                         ? NetworkImage(authProvider.user!.avatarUrl!)
                         : null) as ImageProvider?,
-                child: _avatar == null && authProvider.user?.avatarUrl == null
+                child: (_avatar == null && (authProvider.user?.avatarUrl == null || authProvider.user!.avatarUrl!.isEmpty))
                     ? Icon(Icons.person, size: 50)
                     : null,
               ),
@@ -87,7 +87,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           SizedBox(height: 10),
           Center(child: Text(authProvider.user?.name ?? '', style: Theme.of(context).textTheme.headlineSmall)),
-          Center(child: Text(authProvider.user?.email ?? '')),
+          Center(child: Text(authProvider.user?.userid ?? '')),
           SizedBox(height: 30),
           ListTile(
             leading: Icon(Icons.password),
