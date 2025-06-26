@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../auth/auth_provider.dart';
-import '../utils/app_router.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
-import 'profile_page.dart';
 import 'p2p_video_main_page.dart';
 import 'p2p_video_simple_page.dart';
-import 'cloud_storage_page.dart';
-import 'test_update_page.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -60,103 +54,79 @@ class _HomePageState extends State<HomePage> {
     final colorScheme = theme.colorScheme;
     final textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        title: Row(
-          children: [
-            Icon(Icons.home, color: colorScheme.primary),
-            const SizedBox(width: 8),
-            Text('我的家庭', style: theme.textTheme.titleLarge),
-            const SizedBox(width: 8),
-            Icon(Icons.keyboard_arrow_down, color: colorScheme.onSurface.withOpacity(0.7), size: 20),
+        appBar: AppBar(
+          elevation: 0,
+          title: Row(
+            children: [
+              Icon(Icons.home, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Text('我的家庭', style: theme.textTheme.titleLarge),
+              const SizedBox(width: 8),
+              Icon(Icons.keyboard_arrow_down,
+                  color: colorScheme.onSurface.withOpacity(0.7), size: 20),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(Icons.add, color: colorScheme.primary),
+              tooltip: '添加设备',
+              onPressed: _addDevice,
+            ),
+            // IconButton(
+            //   icon: Icon(Icons.wifi, color: colorScheme.primary),
+            //   tooltip: 'WiFi配网',
+            //   onPressed: () {
+            //     Navigator.of(context).pushNamed('/wifi_config');
+            //   },
+            // ),
+            IconButton(
+              icon: Icon(Icons.system_update, color: colorScheme.primary),
+              tooltip: '升级测试',
+              onPressed: () {
+                Navigator.of(context).pushNamed('/test_update');
+              },
+            ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add, color: colorScheme.primary),
-            tooltip: '添加设备',
-            onPressed: _addDevice,
-          ),
-          // IconButton(
-          //   icon: Icon(Icons.wifi, color: colorScheme.primary),
-          //   tooltip: 'WiFi配网',
-          //   onPressed: () {
-          //     Navigator.of(context).pushNamed('/wifi_config');
-          //   },
-          // ),
-          IconButton(
-            icon: Icon(Icons.system_update, color: colorScheme.primary),
-            tooltip: '升级测试',
-            onPressed: () {
-              Navigator.of(context).pushNamed('/test_update');
-            },
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 房间tab
-            Row(
-              children: [
-                _RoomTab(text: '全屋', selected: true, textColor: textColor),
-                _RoomTab(text: '客厅', textColor: textColor),
-                _RoomTab(text: '未分配房间', textColor: textColor),
-                const Spacer(),
-                          IconButton(
-            icon: Icon(_isGrid ? Icons.view_agenda_outlined : Icons.grid_view_outlined, color: colorScheme.primary.withOpacity(0.74)),
-            tooltip: _isGrid ? '切换为单列' : '切换为双列',
-            onPressed: () {
-              setState(() {
-                _isGrid = !_isGrid;
-              });
-            },
-          ),
-                Icon(Icons.menu, color: colorScheme.onSurface.withOpacity(0.38)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: _isGrid
-                  ? GridView.count(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 1.1,
-                      children: [
-                        ..._devices.map((d) => _DeviceCard(
-                              devId: d['devId']!,
-                              deviceName: d['deviceName']!,
-                              type: d['type']!,
-                              desc: d['desc']!,
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => P2pVideoSimplePage(
-                                      devId: d['devId']!,
-                                      deviceName: d['deviceName']!,
-                                    ),
-                                  ),
-                                );
-                              },
-                              isGrid: true,
-                            )),
-                        _TestDeviceCard(onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => P2pVideoMainPage(devId: 'camId123'),
-                            ),
-                          );
-                        }, isGrid: true),
-                      ],
-                    )
-                  : ListView(
-                      children: [
-                        ..._devices.map((d) => Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: _DeviceCard(
+        body: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 房间tab
+              Row(
+                children: [
+                  _RoomTab(text: '全屋', selected: true, textColor: textColor),
+                  _RoomTab(text: '客厅', textColor: textColor),
+                  _RoomTab(text: '未分配房间', textColor: textColor),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(
+                        _isGrid
+                            ? Icons.view_agenda_outlined
+                            : Icons.grid_view_outlined,
+                        color: colorScheme.primary.withOpacity(0.74)),
+                    tooltip: _isGrid ? '切换为单列' : '切换为双列',
+                    onPressed: () {
+                      setState(() {
+                        _isGrid = !_isGrid;
+                      });
+                    },
+                  ),
+                  Icon(Icons.menu,
+                      color: colorScheme.onSurface.withOpacity(0.38)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _isGrid
+                    ? GridView.count(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 1.1,
+                        children: [
+                          ..._devices.map((d) => _DeviceCard(
                                 devId: d['devId']!,
                                 deviceName: d['deviceName']!,
                                 type: d['type']!,
@@ -171,23 +141,59 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                   );
                                 },
-                                isGrid: false,
-                              ),
-                            )),
-                        _TestDeviceCard(onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => P2pVideoMainPage(devId: 'camId123'),
-                            ),
-                          );
-                        }, isGrid: false),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      )
-    );
+                                isGrid: true,
+                              )),
+                          _TestDeviceCard(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        P2pVideoMainPage(devId: 'camId123'),
+                                  ),
+                                );
+                              },
+                              isGrid: true),
+                        ],
+                      )
+                    : ListView(
+                        children: [
+                          ..._devices.map((d) => Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: _DeviceCard(
+                                  devId: d['devId']!,
+                                  deviceName: d['deviceName']!,
+                                  type: d['type']!,
+                                  desc: d['desc']!,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            P2pVideoSimplePage(
+                                          devId: d['devId']!,
+                                          deviceName: d['deviceName']!,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  isGrid: false,
+                                ),
+                              )),
+                          _TestDeviceCard(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        P2pVideoMainPage(devId: 'camId123'),
+                                  ),
+                                );
+                              },
+                              isGrid: false),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ));
   }
 }
 
@@ -203,7 +209,9 @@ class _RoomTab extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: selected ? (textColor ?? Colors.black) : (textColor?.withOpacity(0.54) ?? Colors.black54),
+          color: selected
+              ? (textColor ?? Colors.black)
+              : (textColor?.withOpacity(0.54) ?? Colors.black54),
           fontWeight: selected ? FontWeight.bold : FontWeight.normal,
           fontSize: 16,
         ),
@@ -219,7 +227,13 @@ class _DeviceCard extends StatelessWidget {
   final String desc;
   final VoidCallback onTap;
   final bool isGrid;
-  const _DeviceCard({required this.devId, required this.deviceName, required this.type, required this.desc, required this.onTap, this.isGrid = false});
+  const _DeviceCard(
+      {required this.devId,
+      required this.deviceName,
+      required this.type,
+      required this.desc,
+      required this.onTap,
+      this.isGrid = false});
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -239,7 +253,8 @@ class _DeviceCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorScheme.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: colorScheme.primary.withOpacity(0.18), width: 1.2),
+            border: Border.all(
+                color: colorScheme.primary.withOpacity(0.18), width: 1.2),
             boxShadow: [
               BoxShadow(
                 color: colorScheme.shadow.withOpacity(0.2),
@@ -257,13 +272,18 @@ class _DeviceCard extends StatelessWidget {
                   Icon(iconData, color: colorScheme.primary, size: 28),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(deviceName, style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    child: Text(deviceName,
+                        style: theme.textTheme.titleMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                   ),
                   TextButton(
                     style: TextButton.styleFrom(
                       backgroundColor: colorScheme.primary.withOpacity(0.08),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 2),
                       minimumSize: Size(0, 32),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -277,7 +297,8 @@ class _DeviceCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   desc,
-                  style: theme.textTheme.bodySmall?.copyWith(color: textColor.withOpacity(0.7)),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: textColor.withOpacity(0.7)),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -310,15 +331,19 @@ class _TestDeviceCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorScheme.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: colorScheme.primary.withOpacity(0.18), width: 1.2),
+            border: Border.all(
+                color: colorScheme.primary.withOpacity(0.18), width: 1.2),
           ),
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.videocam, color: colorScheme.primary.withOpacity(0.54), size: 36),
+                Icon(Icons.videocam,
+                    color: colorScheme.primary.withOpacity(0.54), size: 36),
                 SizedBox(height: 8),
-                Text('测试设备', style: theme.textTheme.bodyMedium?.copyWith(color: textColor.withOpacity(0.54))),
+                Text('测试设备',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: textColor.withOpacity(0.54))),
               ],
             ),
           ),

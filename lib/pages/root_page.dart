@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../auth/auth_provider.dart';
-import '../utils/app_router.dart';
 import '../services/app_update_service.dart';
 import '../widgets/app_update_dialog.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 import 'profile_page.dart';
-import 'p2p_video_main_page.dart';
 import 'cloud_storage_page.dart';
 import 'home_page.dart';
 
@@ -42,9 +38,9 @@ class _RootPageState extends State<RootPage> {
     try {
       final updateService = AppUpdateService();
       await updateService.init();
-      
+
       final appVersion = await updateService.checkForUpdate();
-      
+
       if (appVersion != null && mounted) {
         showDialog(
           context: context,

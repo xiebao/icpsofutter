@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:developer';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 
 class P2pVideoMainPage extends StatefulWidget {
   final String devId;
-  
+
   const P2pVideoMainPage({Key? key, required this.devId}) : super(key: key);
 
   @override
@@ -24,8 +23,8 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   int _decodeMode = 0; // 默认使用硬解(MediaCodec)
   int _displayMode = 1; // 默认使用Texture模式
   bool _isDisposed = false;
-  DateTime? _lastFrameTime;  // 最后收到视频帧的时间
-  bool _isHardwareDecodingFailed = false;  // 硬解是否失败
+  DateTime? _lastFrameTime; // 最后收到视频帧的时间
+  bool _isHardwareDecodingFailed = false; // 硬解是否失败
   bool _decoderInitialized = false;
   String _decoderSource = '';
   String _statusDetail = '';
@@ -38,7 +37,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     _devIdController = TextEditingController(text: widget.devId);
     _channel.setMethodCallHandler(_handleMethod);
     _requestPermissions();
-    
+
     // 添加定时器检查视频流状态
     Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_isDisposed) {
@@ -72,14 +71,18 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         // 后续异步操作
         if (!_decoderInitialized || _decoderSource != 'p2p') {
           await _initDecoder(640, 480, source: 'p2p');
-          setState(() { _statusDetail = '收到onVideoFrame, 初始化解码器'; });
+          setState(() {
+            _statusDetail = '收到onVideoFrame, 初始化解码器';
+          });
         }
         await _videoChannel.invokeMethod('queueH264', {
           'data': h264Frame,
           'pts': DateTime.now().millisecondsSinceEpoch,
           'source': 'p2p',
         });
-        setState(() { _statusDetail = 'queueH264已调用(p2p), len=${h264Frame.length}'; });
+        setState(() {
+          _statusDetail = 'queueH264已调用(p2p), len=${h264Frame.length}';
+        });
       }
     });
   }
@@ -109,7 +112,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
 
   Future<dynamic> _handleMethod(MethodCall call) async {
     if (_isDisposed) return;
-    
+
     switch (call.method) {
       case 'onTextureFrame':
         if (_textureId != null) {
@@ -118,14 +121,14 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
             final yuvData = call.arguments['yuvData'] as List<int>;
             final width = call.arguments['width'] as int;
             final height = call.arguments['height'] as int;
-            
+
             // 更新视频流状态
             if (mounted) {
               setState(() {
                 _statusDetail = '收到视频帧，红点变绿';
               });
             }
-            
+
             // 通知Texture更新
             await _channel.invokeMethod('updateTexture', {
               'textureId': _textureId,
@@ -133,7 +136,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
               'width': width,
               'height': height,
             });
-            
+
             log('[Flutter] Received video frame: ${width}x${height}, data size: ${yuvData.length}');
           } catch (e) {
             log('[Flutter] updateTexture error: $e');
@@ -146,7 +149,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
           setState(() {
             _status = 'Error: $errorMsg';
           });
-          
+
           // 检查是否是硬解错误
           if (errorMsg.contains("MediaCodec") && _decodeMode == 0) {
             _isHardwareDecodingFailed = true;
@@ -161,10 +164,11 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
 
   Future<void> _setDevP2p() async {
     if (_isDisposed) return;
-    
+
     try {
       log('[Flutter] 调用 setDevP2p: ${_devIdController.text}');
-      await _channel.invokeMethod('setDevP2p', {'devId': _devIdController.text});
+      await _channel
+          .invokeMethod('setDevP2p', {'devId': _devIdController.text});
       if (mounted) {
         setState(() {
           _status = 'setDevP2p called: ${_devIdController.text}';
@@ -184,7 +188,9 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     if (_isDisposed) return;
     try {
       log('[Flutter] 开始启动 P2P 视频: ${_devIdController.text}');
-      setState(() { _statusDetail = '调用 _startP2pVideo'; });
+      setState(() {
+        _statusDetail = '调用 _startP2pVideo';
+      });
       if (_isHardwareDecodingFailed) {
         _decodeMode = 1;
         log('[Flutter] 使用软解模式（硬解失败）');
@@ -199,21 +205,29 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       }
       if (!_decoderInitialized || _decoderSource != 'p2p') {
         await _initDecoder(640, 480, source: 'p2p');
-        setState(() { _statusDetail = '已初始化解码器'; });
+        setState(() {
+          _statusDetail = '已初始化解码器';
+        });
       }
       log('[Flutter] 调用原生 startP2pVideo，等待 RecbVideoData 回调...');
-      setState(() { _statusDetail = '等待设备回调数据流...'; });
+      setState(() {
+        _statusDetail = '等待设备回调数据流...';
+      });
       await _channel.invokeMethod('startP2pVideo', {
         'devId': _devIdController.text,
         'displayMode': _displayMode,
         'textureId': _textureId,
         'decodeMode': _decodeMode,
       });
-      setState(() { _statusDetail = 'startP2pVideo已调用，等待第一帧...'; });
+      setState(() {
+        _statusDetail = 'startP2pVideo已调用，等待第一帧...';
+      });
       log('[Flutter] 一键启动完成，等待视频数据...');
     } catch (e) {
       log('[Flutter] startP2pVideo error: $e');
-      setState(() { _statusDetail = '启动异常: $e'; });
+      setState(() {
+        _statusDetail = '启动异常: $e';
+      });
     }
   }
 
@@ -229,7 +243,8 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       }
       if (_textureId != null) {
         try {
-          await _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
+          await _channel
+              .invokeMethod('disposeTexture', {'textureId': _textureId});
         } catch (e) {
           log('[Flutter] disposeTexture error: $e');
         }
@@ -269,7 +284,9 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     try {
       log('[Flutter] 一键启动开始');
       await _setDevP2p();
-      setState(() { _videoStarted = true; }); // 先显示AndroidView
+      setState(() {
+        _videoStarted = true;
+      }); // 先显示AndroidView
       // AndroidView创建后会自动回调onPlatformViewCreated
       // _startP2pVideoOnPlatformView会在onPlatformViewCreated里调用
       if (mounted) {
@@ -289,9 +306,11 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
 
   void _setDecodeMode(int mode) async {
     if (_isDisposed) return;
-    
+
     try {
-      setState(() { _decodeMode = mode; });
+      setState(() {
+        _decodeMode = mode;
+      });
       await _channel.invokeMethod('setDecodeMode', {'mode': mode});
     } catch (e) {
       log('[Flutter] setDecodeMode error: $e');
@@ -359,7 +378,8 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                     children: [
                       const Icon(Icons.device_hub, color: Colors.blue),
                       const SizedBox(width: 8),
-                      const Text('设备ID: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('设备ID: ',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       Text(widget.devId, style: const TextStyle(fontSize: 16)),
                     ],
                   ),
@@ -385,30 +405,37 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                       child: const Text('Stop'),
                     ),
                     ToggleButtons(
-                      isSelected: [_decodeMode==1, _decodeMode==0],
-                      onPressed: (idx) => _setDecodeMode(idx==0?1:0),
+                      isSelected: [_decodeMode == 1, _decodeMode == 0],
+                      onPressed: (idx) => _setDecodeMode(idx == 0 ? 1 : 0),
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('软解(ExoPlayer)${_isHardwareDecodingFailed ? " (当前)" : ""}'),
+                          child: Text(
+                              '软解(ExoPlayer)${_isHardwareDecodingFailed ? " (当前)" : ""}'),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('硬解(MediaCodec)${!_isHardwareDecodingFailed ? " (当前)" : ""}'),
+                          child: Text(
+                              '硬解(MediaCodec)${!_isHardwareDecodingFailed ? " (当前)" : ""}'),
                         ),
                       ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-                Row(children: [
-                  const Text('视频流显示区：'),
-                  _statusDetail.contains('已接收')
-                    ? const Icon(Icons.circle, color: Colors.green)
-                    : const Icon(Icons.circle, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_statusDetail, style: TextStyle(fontSize: 12, color: Colors.blueGrey))),
-                ],),
+                Row(
+                  children: [
+                    const Text('视频流显示区：'),
+                    _statusDetail.contains('已接收')
+                        ? const Icon(Icons.circle, color: Colors.green)
+                        : const Icon(Icons.circle, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: Text(_statusDetail,
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.blueGrey))),
+                  ],
+                ),
                 _buildVideoView(),
                 const SizedBox(height: 20),
                 Row(
@@ -416,7 +443,8 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                   children: [
                     ElevatedButton(
                       onPressed: () async {
-                        await _videoChannel.invokeMethod('startCameraH264Stream', {
+                        await _videoChannel
+                            .invokeMethod('startCameraH264Stream', {
                           'width': 640,
                           'height': 480,
                         });
@@ -430,7 +458,8 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                     const SizedBox(width: 16),
                     ElevatedButton(
                       onPressed: () async {
-                        await _videoChannel.invokeMethod('stopCameraH264Stream');
+                        await _videoChannel
+                            .invokeMethod('stopCameraH264Stream');
                         setState(() {
                           // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
                           _statusDetail = '停止摄像头H264推流';
@@ -465,8 +494,9 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
           : Container(
               color: Colors.black12,
               alignment: Alignment.center,
-              child: const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
+              child:
+                  const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
             ),
     );
   }
-} 
+}

@@ -6,8 +6,6 @@ import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 import 'auth/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'utils/app_router.dart';
-import 'pages/login_page.dart';
-import 'pages/root_page.dart';
 import 'services/app_lifecycle_service.dart';
 import 'services/mqtt_service.dart';
 
@@ -22,7 +20,7 @@ void main() async {
   // Create providers
   final authProvider = AuthProvider();
   final themeProvider = ThemeProvider();
-  
+
   // Initialize providers
   await authProvider.init();
   await themeProvider.init();
@@ -48,7 +46,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Music App',
       debugShowCheckedModeBanner: false,
-      
+
       // --- Internationalization Setup ---
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -70,7 +68,8 @@ class MyApp extends StatelessWidget {
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFF00B86B), brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: Color(0xFF00B86B), brightness: Brightness.dark),
         visualDensity: VisualDensity.adaptivePlatformDensity,
         useMaterial3: true,
       ),
@@ -84,7 +83,8 @@ class MyApp extends StatelessWidget {
 
       // --- Home Screen Logic ---
       // If user is authenticated, show HomePage, otherwise show LoginPage.
-      initialRoute: authProvider.isAuthenticated ? AppRouter.root : AppRouter.login,
+      initialRoute:
+          authProvider.isAuthenticated ? AppRouter.root : AppRouter.login,
     );
   }
 }
