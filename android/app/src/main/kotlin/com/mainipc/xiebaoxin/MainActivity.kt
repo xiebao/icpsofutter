@@ -81,6 +81,17 @@ class MainActivity: FlutterActivity() {
                     try {
                         Log.d(TAG, "Starting P2P video")
                         Log.d(TAG, "[CALL] startP2pVideo 调用前")
+                        if (surfaceEntryP2p != null) {
+                            val surfaceTexture = surfaceEntryP2p!!.surfaceTexture()
+                            if (surfaceP2p != null) {
+                                surfaceP2p?.release()
+                            }
+                            surfaceP2p = Surface(surfaceTexture)
+                            if (h264DecoderP2p == null) {
+                                h264DecoderP2p = H264Decoder()
+                            }
+                            h264DecoderP2p?.init(surfaceP2p!!, 640, 480)
+                        }
                         startP2pVideo()
                         Log.d(TAG, "[CALL] startP2pVideo 调用后")
                         result.success(null)
@@ -93,6 +104,10 @@ class MainActivity: FlutterActivity() {
                     try {
                         Log.d(TAG, "Stopping P2P video")
                         Log.d(TAG, "[CALL] stopP2pVideo 调用前")
+                        h264DecoderP2p?.release()
+                        h264DecoderP2p = null
+                        surfaceP2p?.release()
+                        surfaceP2p = null
                         stopP2pVideo()
                         Log.d(TAG, "[CALL] stopP2pVideo 调用后")
                         result.success(null)
@@ -146,6 +161,20 @@ class MainActivity: FlutterActivity() {
                     val topic = call.argument<String>("topic") ?: ""
                     val ret = sendJsonMsg(json, topic)
                     result.success(ret)
+                }
+                "createTexture" -> {
+                    if (surfaceEntryP2p != null) {
+                        surfaceEntryP2p?.release()
+                        surfaceEntryP2p = null
+                    }
+                    surfaceEntryP2p = P2pTexturePlugin.textureRegistry?.createSurfaceTexture()
+                    val textureId = surfaceEntryP2p?.id()
+                    result.success(textureId)
+                }
+                "disposeTexture" -> {
+                    surfaceEntryP2p?.release()
+                    surfaceEntryP2p = null
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }

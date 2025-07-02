@@ -251,7 +251,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       } else {
         await _channel.invokeMethod('stopP2pVideo');
       }
-      if (_textureId != null) {
+      if (_displayMode == 1 && _textureId != null) {
         try {
           await _channel
               .invokeMethod('disposeTexture', {'textureId': _textureId});
@@ -435,6 +435,29 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                         ),
                       ],
                     ),
+                    // 新增：显示模式切换按钮
+                    ToggleButtons(
+                      isSelected: [_displayMode == 1, _displayMode == 0],
+                      onPressed: (idx) async {
+                        if (_displayMode != (idx == 0 ? 1 : 0)) {
+                          setState(() {
+                            _displayMode = idx == 0 ? 1 : 0;
+                          });
+                          await _stopP2pVideo();
+                          await _startP2pVideoFull();
+                        }
+                      },
+                      children: const [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('Texture模式'),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('PlatformView'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -495,15 +518,17 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       width: 320,
       height: 240,
       child: _videoStarted
-          ? AndroidView(
-              viewType: 'p2p_video_view',
-              onPlatformViewCreated: (int id) {
-                _platformViewId = id;
-                _startP2pVideoOnPlatformView();
-              },
-              creationParams: const {},
-              creationParamsCodec: const StandardMessageCodec(),
-            )
+          ? (_displayMode == 1 && _textureId != null
+              ? Texture(textureId: _textureId!)
+              : AndroidView(
+                  viewType: 'p2p_video_view',
+                  onPlatformViewCreated: (int id) {
+                    _platformViewId = id;
+                    _startP2pVideoOnPlatformView();
+                  },
+                  creationParams: const {},
+                  creationParamsCodec: const StandardMessageCodec(),
+                ))
           : Container(
               color: Colors.black12,
               alignment: Alignment.center,
