@@ -34,6 +34,8 @@ class MainActivity: FlutterActivity() {
     private external fun stopP2pVideo()
     private external fun deinitMqtt()
     external fun nativeRecbVideoData(data: ByteArray, len: Int)
+    private external fun bindNative()
+    private external fun sendJsonMsg(json: String, topic: String): Int
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -43,6 +45,8 @@ class MainActivity: FlutterActivity() {
         val factory = P2pVideoViewFactory(messenger)
         var p2pView: P2pVideoView? = null
         p2pView = P2pVideoView(this, messenger, MethodChannel(messenger, "p2p_video_view_manual"), 0, null)
+        
+        bindNative()
         
         methodChannel = MethodChannel(messenger, CHANNEL)
         methodChannel?.setMethodCallHandler { call, result ->
@@ -137,6 +141,12 @@ class MainActivity: FlutterActivity() {
                         result.error("MQTT_DEINIT_ERROR", "Failed to deinitialize MQTT: ${e.message}", null)
                     }
                 }
+                "sendJsonMsg" -> {
+                    val json = call.argument<String>("json") ?: ""
+                    val topic = call.argument<String>("topic") ?: ""
+                    val ret = sendJsonMsg(json, topic)
+                    result.success(ret)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -151,17 +161,16 @@ class MainActivity: FlutterActivity() {
     // MQTT 消息回调方法，由 C++ 调用
     fun onMqttMessage(data: ByteArray, length: Int) {
         Log.d(TAG, "Received MQTT message, length: $length")
-        
         try {
-            // 将消息转换为字符串（假设是 JSON 格式）
             val messageString = String(data, 0, length, Charsets.UTF_8)
             Log.d(TAG, "MQTT message content: $messageString")
-            
-            // 通过 MethodChannel 发送消息到 Flutter
-            methodChannel?.invokeMethod("onMqttMessage", mapOf(
-                "data" to messageString,
-                "length" to length
-            ))
+            // 切换到主线程
+            Handler(Looper.getMainLooper()).post {
+                methodChannel?.invokeMethod("onMqttMessage", mapOf(
+                    "data" to messageString,
+                    "length" to length
+                ))
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing MQTT message", e)
         }

@@ -12,6 +12,7 @@
 #include <chrono>
 #include <thread>
 #include "p2pInterface.h"
+#include "cJSON.h"
 
 #define LOG_TAG "NativeLib"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -29,10 +30,38 @@ static std::atomic<int> g_frameCount(0);
 static std::atomic<int> g_errorCount(0);
 static std::atomic<bool> g_isDisposed(false);
 static jlong g_flutterTextureId = 0;
+static jobject g_mainActivityRef = nullptr;
 
 // 空实现的消息回调
 void RecbMsgData(void* pMsgData, int nLen) {
-    // 完全空的实现，不做任何处理
+    LOGI("[MQTT] >>>>>>>>>>>> RecbMsgData called! length: %d", nLen);
+    if (!g_vm || !g_mainActivityRef || !pMsgData || nLen <= 0) {
+        LOGI("[MQTT] 回调参数无效，忽略");
+        return;
+    }
+    JNIEnv* env;
+    bool needDetach = false;
+    if (g_vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            LOGI("[MQTT] Failed to attach thread");
+            return;
+        }
+        needDetach = true;
+    }
+    jclass clazz = env->GetObjectClass(g_mainActivityRef);
+    jmethodID onMqttMsg = env->GetMethodID(clazz, "onMqttMessage", "([BI)V");
+    if (onMqttMsg) {
+        jbyteArray jMsg = env->NewByteArray(nLen);
+        env->SetByteArrayRegion(jMsg, 0, nLen, reinterpret_cast<const jbyte*>(pMsgData));
+        env->CallVoidMethod(g_mainActivityRef, onMqttMsg, jMsg, nLen);
+        env->DeleteLocalRef(jMsg);
+        LOGI("[MQTT] 已回调 Java 层 onMqttMessage");
+    } else {
+        LOGI("[MQTT] 未找到 onMqttMessage 方法");
+    }
+    if (needDetach) {
+        g_vm->DetachCurrentThread();
+    }
 }
 
 // 独立的摄像头回调函数，避免与P2P回调冲突
@@ -105,30 +134,12 @@ void RecbCameraData(void* data, int length) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_xiebaoxin_MainActivity_P2pTestActivity_bindNative(
-        JNIEnv* env,
-        jobject thiz) {
-    if (g_isDisposed) {
-        LOGI("View is disposed, ignoring bind request");
-        return;
+Java_com_mainipc_xiebaoxin_MainActivity_bindNative(JNIEnv* env, jobject thiz) {
+    if (g_mainActivityRef != nullptr) {
+        env->DeleteGlobalRef(g_mainActivityRef);
     }
-
-    // 保存 JavaVM 指针
-    env->GetJavaVM(&g_vm);
-
-    // 保存 P2pVideoView 实例的全局引用
-    if (g_p2pVideoView != nullptr) {
-        env->DeleteGlobalRef(g_p2pVideoView);
-    }
-    g_p2pVideoView = env->NewGlobalRef(thiz);
-
-    // 获取方法 ID
-    jclass clazz = env->GetObjectClass(thiz);
-    g_onVideoFrameMethod = env->GetMethodID(clazz, "onVideoFrame", "([B)V");
-    g_onTextureFrameMethod = env->GetMethodID(clazz, "onTextureFrame", "(JII)V");
-    g_onErrorMethod = env->GetMethodID(clazz, "onError", "(Ljava/lang/String;)V");
-
-    LOGI("Native bind successful");
+    g_mainActivityRef = env->NewGlobalRef(thiz);
+    // 可选：env->GetJavaVM(&g_vm);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -173,9 +184,9 @@ static void notifyError(const char* message) {
         needDetach = true;
     }
 
-    jstring jMessage = env->NewStringUTF(message);
-    env->CallVoidMethod(g_p2pVideoView, g_onErrorMethod, jMessage);
-    env->DeleteLocalRef(jMessage);
+        jstring jMessage = env->NewStringUTF(message);
+        env->CallVoidMethod(g_p2pVideoView, g_onErrorMethod, jMessage);
+        env->DeleteLocalRef(jMessage);
 
     if (needDetach) {
         g_vm->DetachCurrentThread();
@@ -222,9 +233,9 @@ void RecbVideoData(void* data, int length) {
     JNIEnv* env;
     bool needDetach = false;
     if (g_vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+    if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
             LOGI("[自检] Failed to attach thread");
-            return;
+        return;
         }
         needDetach = true;
     }
@@ -265,7 +276,7 @@ void RecbVideoData(void* data, int length) {
     }
 
     if (needDetach) {
-        g_vm->DetachCurrentThread();
+    g_vm->DetachCurrentThread();
     }
 }
 
@@ -789,4 +800,22 @@ Java_com_mainipc_xiebaoxin_MainActivity_nativeRecbVideoData(
     } else {
         LOGI("[摄像头] Failed to get byte array elements");
     }
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_mainipc_xiebaoxin_MainActivity_sendJsonMsg(JNIEnv *env, jobject thiz, jstring json, jstring topic) {
+    const char *jsonStr = env->GetStringUTFChars(json, nullptr);
+    const char *topicStr = env->GetStringUTFChars(topic, nullptr);
+
+    cJSON *jsonObj = cJSON_Parse(jsonStr);
+    int ret = -1;
+    if (jsonObj) {
+        ret = SendJsonMsg(jsonObj, (char*)topicStr);
+        cJSON_Delete(jsonObj);
+    }
+
+    env->ReleaseStringUTFChars(json, jsonStr);
+    env->ReleaseStringUTFChars(topic, topicStr);
+    return ret;
 } 

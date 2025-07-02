@@ -33,8 +33,15 @@ target_include_directories(native-lib PRIVATE ${CMAKE_SOURCE_DIR})
 find_library(log-lib log)
 find_library(android-lib android)
 
+add_library(
+    cjson
+    STATIC
+    cJSON.c
+)
+
 target_link_libraries(
     native-lib
+    cjson
     ${log-lib}
     ${android-lib}
     p2p

@@ -33,6 +33,7 @@ class MqttService {
         case 'onMqttMessage':
           final messageData = call.arguments['data'] as String;
           final length = call.arguments['length'] as int;
+          print("[MQTT Service]<<<==" + messageData);
           log('[MQTT Service] 收到 MQTT 消息: $messageData (长度: $length)');
           // 这里可以添加全局的消息处理逻辑，比如显示通知等
           break;
@@ -112,4 +113,27 @@ class MqttService {
   bool get isInitialized => _isInitialized;
   String? get currentUserId => _currentUserId;
   bool get isAppActive => _isAppActive;
+
+  // 新增：通过 so 库发送 json 消息到指定 topic
+  Future<int> sendJsonMsg(String json, String topic) async {
+    try {
+      final ret = await _channel
+          .invokeMethod('sendJsonMsg', {'json': json, 'topic': topic});
+      print("[MQTT Service]==>>" + topic + ",json:" + json.toString());
+      log('[MQTT Service] sendJsonMsg 返回: $ret');
+      return ret as int;
+    } catch (e) {
+      log('[MQTT Service] sendJsonMsg 调用失败: $e');
+      return -1;
+    }
+  }
+
+  // 测试方法：发送一条测试消息
+  //await MqttService.instance.sendJsonMsg('{"type":"test","data":"hello"}', '/yyt/test/topic');
+  Future<void> testSendJsonMsg() async {
+    final testJson = '{"type":"test","data":"hello from Dart"}';
+    final testTopic = '/yyt/phoneId123/msg';
+    final ret = await sendJsonMsg(testJson, testTopic);
+    log('[MQTT Service] testSendJsonMsg 返回: $ret');
+  }
 }

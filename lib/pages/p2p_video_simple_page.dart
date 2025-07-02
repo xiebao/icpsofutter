@@ -377,6 +377,18 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
                   onPressed: _stopP2pVideo,
                   child: Text('停止P2P视频'),
                 ),
+                ElevatedButton(
+                  onPressed: () async {
+                    setState(() {
+                      _status = '正在测试SendJsonMsg...';
+                    });
+                    await _mqttService.testSendJsonMsg();
+                    setState(() {
+                      _status = 'SendJsonMsg测试已触发，请查看日志';
+                    });
+                  },
+                  child: Text('测试SendJsonMsg'),
+                ),
               ],
             ),
             SizedBox(height: 16),
