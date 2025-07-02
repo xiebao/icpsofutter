@@ -195,6 +195,7 @@ static void notifyError(const char* message) {
 
 void RecbVideoData(void* data, int length) {
     LOGI("[自检] >>>>>>>>>>>> RecbVideoData called! length: %d", length);
+    LOGI("[自检] RecbVideoData: g_p2pVideoView=%p, g_onVideoFrameMethod=%p", g_p2pVideoView, g_onVideoFrameMethod);
     
     if (g_isDisposed || !g_vm || !g_p2pVideoView) {
         LOGI("[自检] View is disposed or not available, ignoring video data");
@@ -233,50 +234,28 @@ void RecbVideoData(void* data, int length) {
     JNIEnv* env;
     bool needDetach = false;
     if (g_vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-    if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
             LOGI("[自检] Failed to attach thread");
-        return;
+            return;
         }
         needDetach = true;
     }
 
-    try {
-        if (g_isTextureMode) {
-            if (g_onTextureFrameMethod && g_textureId.load() != 0) {
-                jbyteArray jData = env->NewByteArray(length);
-                if (jData) {
-                    env->SetByteArrayRegion(jData, 0, length, reinterpret_cast<const jbyte*>(data));
-                    env->CallVoidMethod(g_p2pVideoView, g_onTextureFrameMethod, 
-                        g_textureId.load(), jData, length);
-                    env->DeleteLocalRef(jData);
-                    LOGI("[自检] Texture frame sent to Java layer successfully");
-                }
-            } else {
-                LOGI("[自检] Texture mode but method not available or textureId is 0");
-            }
-        } else {
-            if (g_onVideoFrameMethod) {
-                jbyteArray jData = env->NewByteArray(length);
-                if (jData) {
-                    env->SetByteArrayRegion(jData, 0, length, reinterpret_cast<const jbyte*>(data));
-                    env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, jData);
-                    env->DeleteLocalRef(jData);
-                    LOGI("[自检] Video frame sent to Java layer successfully");
-                }
-            } else {
-                LOGI("[自检] onVideoFrameMethod not available");
-            }
+    // 强制只走 onVideoFrameMethod 分支
+    if (g_onVideoFrameMethod) {
+        jbyteArray jData = env->NewByteArray(length);
+        if (jData) {
+            env->SetByteArrayRegion(jData, 0, length, reinterpret_cast<const jbyte*>(data));
+            env->CallVoidMethod(g_p2pVideoView, g_onVideoFrameMethod, jData);
+            env->DeleteLocalRef(jData);
+            LOGI("[自检] Video frame sent to Java layer successfully (force AndroidView)");
         }
-        g_frameCount++;
-        LOGI("[自检] Frame count: %d", g_frameCount.load());
-    } catch (const std::exception& e) {
-        g_errorCount++;
-        LOGE("[自检] Error processing video data: %s", e.what());
-        notifyError(e.what());
+    } else {
+        LOGI("[自检] onVideoFrameMethod not available");
     }
 
     if (needDetach) {
-    g_vm->DetachCurrentThread();
+        g_vm->DetachCurrentThread();
     }
 }
 
@@ -481,7 +460,7 @@ Java_com_mainipc_xiebaoxin_P2pVideoView_bindNative(
     g_onTextureFrameMethod = env->GetMethodID(clazz, "onTextureFrame", "(JII)V");
     g_onErrorMethod = env->GetMethodID(clazz, "onError", "(Ljava/lang/String;)V");
 
-    LOGI("P2pVideoView native bind successful");
+    LOGI("P2pVideoView native bind successful, g_p2pVideoView=%p, g_onVideoFrameMethod=%p", g_p2pVideoView, g_onVideoFrameMethod);
 }
 
 extern "C" JNIEXPORT void JNICALL

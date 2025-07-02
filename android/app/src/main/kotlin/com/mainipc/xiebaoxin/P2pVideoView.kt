@@ -344,6 +344,10 @@ class P2pVideoView(
             return
         }
         when (call.method) {
+            "bindNative" -> {
+                bindNative()
+                result.success(null)
+            }
             "startP2pVideo" -> {
                 Log.d(TAG, "[自检] onMethodCall: startP2pVideo")
                 // 处理带参数的startP2pVideo调用

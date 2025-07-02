@@ -281,6 +281,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   Future<void> _startP2pVideoOnPlatformView() async {
     if (_platformViewId == null) return;
     final channel = MethodChannel('p2p_video_view_$_platformViewId');
+    await channel.invokeMethod('bindNative');
     await channel.invokeMethod('startP2pVideo', {
       'devId': _devIdController.text,
       'displayMode': _displayMode,
