@@ -20,6 +20,10 @@ samples, guidance on mobile development, and a full API reference.
             摄像头采集 -> H264编码 ->    RecbVideoData回调 -> 解码 -> Texture显示。
 原生so库的调用：initMqtt->setDevP2p-> startP2pVideo ->   RecbVideoData回调 -> 解码 -> Texture
 
+设备端推流 → so库收到数据 → 调用 RecbVideoData → JNI 回调 Java/Kotlin → 通过 MethodChannel 回调 Dart/Flutter → UI 显示视频帧
+
+ Flutter调用 → JNI startP2pVideo → StartP2pVideoWrapper → ::StartP2pVideo(pRecvVideoCB)
+
 +----------------+       +-------------------+       +-----------------------+       +-----------------+
 | Flutter (Dart) | <---> | Platform Channels | <---> | Android (Kotlin/Java) | <---> | JNI Interface   | <---> | C Library (.so) |
 |                |       |                   |       |      (Native Code)    |       | (C/C++ .cpp/.c) |       | (Actual logic)  |

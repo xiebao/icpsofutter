@@ -14,14 +14,14 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
   final _pwdController = TextEditingController();
   final WifiConfigService _wifiService = WifiConfigService();
   final NetworkInfo _networkInfo = NetworkInfo();
-  
+
   String _securityType = 'WPA';
   String? _qrData;
   bool _showQr = false;
   bool _configSuccess = false;
   bool _permissionsGranted = false;
   bool _isLoading = true;
-  
+
   // WiFi信息
   String _currentWifiName = '';
   String _currentWifiBSSID = '';
@@ -50,7 +50,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
     setState(() {
       _permissionsGranted = granted;
     });
-    
+
     if (!granted) {
       _showPermissionDialog();
       setState(() {
@@ -61,7 +61,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
 
     // 获取当前WiFi信息
     await _getCurrentWifiInfo();
-    
+
     setState(() {
       _isLoading = false;
     });
@@ -71,12 +71,12 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
     try {
       String? wifiName = await _networkInfo.getWifiName();
       String? wifiBSSID = await _networkInfo.getWifiBSSID();
-      
+
       setState(() {
         _currentWifiName = wifiName?.replaceAll('"', '') ?? '';
         _currentWifiBSSID = wifiBSSID?.replaceAll('"', '') ?? '';
       });
-      
+
       // 如果获取到WiFi名称，自动填充
       if (_currentWifiName.isNotEmpty) {
         debugPrint('当前WiFi: $_currentWifiName');
@@ -95,7 +95,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
     try {
       // 模拟扫描网络（实际项目中需要使用原生插件）
       await Future.delayed(Duration(seconds: 2));
-      
+
       setState(() {
         _availableNetworks = [
           {'ssid': 'TestWiFi_1', 'signal': -45, 'security': 'WPA2'},
@@ -159,7 +159,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
     setState(() {
       _permissionsGranted = granted;
     });
-    
+
     if (!granted) {
       _showPermissionDialog();
     } else {
@@ -228,14 +228,13 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('WiFi配网'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: _isLoading 
-        ? Center(child: CircularProgressIndicator())
-        : Padding(
-            padding: EdgeInsets.all(16.0),
-            child: _showQr ? _buildQrView() : _buildInputView(),
-          ),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: EdgeInsets.all(16.0),
+              child: _showQr ? _buildQrView() : _buildInputView(),
+            ),
     );
   }
 
@@ -268,11 +267,12 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
             ),
             SizedBox(height: 16),
           ],
-          
+
           // WiFi网络选择
-          Text('WiFi网络', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text('WiFi网络',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           SizedBox(height: 12),
-          
+
           if (_currentWifiName.isNotEmpty) ...[
             // 显示当前WiFi
             Container(
@@ -359,7 +359,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
             ),
             SizedBox(height: 16),
           ],
-          
+
           // 手动输入WiFi名称（备选）
           if (_currentWifiName.isEmpty) ...[
             TextFormField(
@@ -385,7 +385,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
             ),
             SizedBox(height: 16),
           ],
-          
+
           // WiFi密码
           TextFormField(
             controller: _pwdController,
@@ -402,27 +402,27 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
             },
           ),
           SizedBox(height: 16),
-          
-          // 加密方式
-          DropdownButtonFormField<String>(
-            value: _securityType,
-            decoration: InputDecoration(
-              labelText: '加密方式',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              DropdownMenuItem(value: 'WPA', child: Text('WPA/WPA2')),
-              DropdownMenuItem(value: 'WEP', child: Text('WEP')),
-              DropdownMenuItem(value: 'Open', child: Text('开放网络')),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _securityType = value ?? 'WPA';
-              });
-            },
-          ),
-          SizedBox(height: 32),
-          
+
+          // // 加密方式
+          // DropdownButtonFormField<String>(
+          //   value: _securityType,
+          //   decoration: InputDecoration(
+          //     labelText: '加密方式',
+          //     border: OutlineInputBorder(),
+          //   ),
+          //   items: [
+          //     DropdownMenuItem(value: 'WPA', child: Text('WPA/WPA2')),
+          //     DropdownMenuItem(value: 'WEP', child: Text('WEP')),
+          //     DropdownMenuItem(value: 'Open', child: Text('开放网络')),
+          //   ],
+          //   onChanged: (value) {
+          //     setState(() {
+          //       _securityType = value ?? 'WPA';
+          //     });
+          //   },
+          // ),
+          // SizedBox(height: 32),
+
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -447,7 +447,6 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         SizedBox(height: 24),
-        
         Container(
           padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -481,7 +480,6 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
           ),
         ),
         SizedBox(height: 32),
-        
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -498,4 +496,4 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
       ],
     );
   }
-} 
+}

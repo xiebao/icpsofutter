@@ -1,8 +1,15 @@
 #ifndef P2PINTERFACE_H
 #define P2PINTERFACE_H
 
+// arm64-v8a的so库是C++编译的，不需要extern "C"
+// armeabi-v7a的so库是C编译的，需要extern "C"
 #ifdef __cplusplus
+#ifdef ANDROID_ABI_arm64_v8a
+// arm64-v8a: C++编译的so库，不使用extern "C"
+#else
+// armeabi-v7a: C编译的so库，使用extern "C"
 extern "C" {
+#endif
 #endif
 
 typedef  void (*pFunRecvCB)(void* ,int );
@@ -37,7 +44,12 @@ void StopP2pVideo();
 
 ////  p2pInterface.h
 #ifdef __cplusplus
+#ifdef ANDROID_ABI_arm64_v8a
+// arm64-v8a: 不需要关闭extern "C"
+#else
+// armeabi-v7a: 关闭extern "C"
 }
+#endif
 #endif
 
 #endif // P2PINTERFACE_H

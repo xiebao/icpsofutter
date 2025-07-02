@@ -46,12 +46,13 @@ import android.opengl.GLES20
 class P2pVideoViewFactory(private val messenger: BinaryMessenger) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, id: Int, args: Any?): PlatformView {
         val creationParams = args as? Map<String?, Any?>
-        return P2pVideoView(context, MethodChannel(messenger, "p2p_video_view_$id"), id, creationParams)
+        return P2pVideoView(context, messenger, MethodChannel(messenger, "p2p_video_view_$id"), id, creationParams)
     }
 }
 
 class P2pVideoView(
     private val context: Context,
+    private val binaryMessenger: BinaryMessenger,
     private val messenger: MethodChannel,
     private val id: Int,
     creationParams: Map<String?, Any?>?
@@ -136,6 +137,7 @@ class P2pVideoView(
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, width * height)
                 setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             }
             
             mediaCodec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
@@ -209,6 +211,19 @@ class P2pVideoView(
         }
         Log.d(TAG, "[流程] onVideoFrame 被调用, data.length=${data.size}")
         try {
+            // 同时发送到Flutter层和本地处理
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    // 发送到Flutter层的video_frame_channel
+                    val videoChannel = MethodChannel(binaryMessenger, "video_frame_channel")
+                    videoChannel.invokeMethod("onVideoFrame", data)
+                    Log.d(TAG, "[流程] 视频帧已发送到Flutter层")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error sending frame to Flutter", e)
+                }
+            }
+            
+            // 本地处理
             val length = data.size
             val buffer = ByteBuffer.allocate(length)
             buffer.put(data, 0, length)
@@ -331,12 +346,31 @@ class P2pVideoView(
         when (call.method) {
             "startP2pVideo" -> {
                 Log.d(TAG, "[自检] onMethodCall: startP2pVideo")
+                // 处理带参数的startP2pVideo调用
+                val devId = call.argument<String>("devId")
+                val displayMode = call.argument<Int>("displayMode") ?: 0
+                val textureId = call.argument<Long>("textureId")
+                val decodeMode = call.argument<Int>("decodeMode") ?: 0
+                
+                Log.d(TAG, "[参数] devId=$devId, displayMode=$displayMode, textureId=$textureId, decodeMode=$decodeMode")
+                
+                // 设置显示模式
+                setDisplayMode(displayMode)
+                
+                // 如果有textureId，设置纹理ID
+                textureId?.let { setTextureId(it) }
+                
+                // 启动视频流
+                Log.d(TAG, "[CALL] startP2pVideo 调用前")
                 startP2pVideo()
+                Log.d(TAG, "[CALL] startP2pVideo 调用后")
                 result.success(null)
             }
             "stopP2pVideo" -> {
                 Log.d(TAG, "[自检] onMethodCall: stopP2pVideo")
+                Log.d(TAG, "[CALL] stopP2pVideo 调用前")
                 stopP2pVideo()
+                Log.d(TAG, "[CALL] stopP2pVideo 调用后")
                 result.success(null)
             }
             "setVideoSize" -> {
@@ -416,4 +450,6 @@ class P2pVideoView(
     private external fun bindNative()
     private external fun stopP2pVideo()
     private external fun startP2pVideo()
+    private external fun setDisplayMode(mode: Int)
+    private external fun setTextureId(textureId: Long)
 } 

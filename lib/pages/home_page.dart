@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 import 'p2p_video_main_page.dart';
 import 'p2p_video_simple_page.dart';
+import 'p2p_video_page.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -134,7 +135,7 @@ class _HomePageState extends State<HomePage> {
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (context) => P2pVideoSimplePage(
+                                      builder: (context) => P2pVideoPage(
                                         devId: d['devId']!,
                                         deviceName: d['deviceName']!,
                                       ),

@@ -46,10 +46,11 @@ class AppRouter {
         devId = args;
       }
       return MaterialPageRoute(
-        builder: (_) => DeviceSettingsPage(devId: devId, deviceName: deviceName),
+        builder: (_) =>
+            DeviceSettingsPage(devId: devId, deviceName: deviceName),
       );
     }
     // 可扩展更多需要参数的页面
     return null;
   }
-} 
+}

@@ -16,7 +16,8 @@ class P2pVideoMainPage extends StatefulWidget {
 
 class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
-  static const MethodChannel _videoChannel = MethodChannel('p2p_video_channel');
+  static const MethodChannel _videoChannel =
+      MethodChannel('video_frame_channel');
   String _status = 'Idle';
   late final TextEditingController _devIdController;
   bool _videoStarted = false;
@@ -30,6 +31,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   String _statusDetail = '';
   int? _textureId;
   int? _platformViewId; // 新增：保存PlatformView的id
+  bool _videoStreamAvailable = false;
 
   @override
   void initState() {
@@ -44,14 +46,22 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         timer.cancel();
         return;
       }
-      if (_videoStarted && _lastFrameTime != null) {
-        final now = DateTime.now();
-        final diff = now.difference(_lastFrameTime!);
-        if (diff.inSeconds > 2 && _statusDetail.contains('已接收')) {
+      if (_videoStarted) {
+        if (_lastFrameTime != null) {
+          final now = DateTime.now();
+          final diff = now.difference(_lastFrameTime!);
+          if (diff.inSeconds > 2 && _videoStreamAvailable) {
+            setState(() {
+              _videoStreamAvailable = false;
+              _statusDetail = '超过2秒未收到视频帧，红点变红';
+            });
+            log('[Flutter] 超过2秒未收到视频帧，红点变红');
+          }
+        } else if (!_videoStreamAvailable) {
           setState(() {
-            _statusDetail = '超过2秒未收到视频帧，红点变红';
+            _videoStreamAvailable = false;
+            _statusDetail = '尚未收到视频流，红点为红';
           });
-          log('[Flutter] setState: 超过2秒未收到视频帧，_statusDetail=$_statusDetail');
         }
       }
     });
@@ -59,16 +69,16 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
     _videoChannel.setMethodCallHandler((call) async {
       if (call.method == 'onVideoFrame') {
         final Uint8List h264Frame = call.arguments;
-        // 先刷新时间
-        _lastFrameTime = DateTime.now();
+        print('[Flutter] onVideoFrame received, len=h264Frame.length}');
         // 只要收到帧，立即变绿
-        if (!_statusDetail.contains('已接收')) {
+        if (!_videoStreamAvailable) {
           setState(() {
+            _videoStreamAvailable = true;
             _statusDetail = '收到视频帧，红点变绿';
           });
-          log('[Flutter] setState: onVideoFrame, _statusDetail=$_statusDetail');
+          log('[Flutter] 收到 onVideoFrame，红点变绿');
         }
-        // 后续异步操作
+        _lastFrameTime = DateTime.now();
         if (!_decoderInitialized || _decoderSource != 'p2p') {
           await _initDecoder(640, 480, source: 'p2p');
           setState(() {
@@ -323,7 +333,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   }
 
   Future<void> _initDecoder(int width, int height, {String source = ''}) async {
-    await _videoChannel.invokeMethod('initDecoder', {
+    await _channel.invokeMethod('initDecoder', {
       'textureId': _textureId,
       'width': width,
       'height': height,
@@ -337,12 +347,16 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   }
 
   Future<void> _releaseDecoder({String source = ''}) async {
-    await _videoChannel.invokeMethod('releaseDecoder', {'source': source});
-    setState(() {
-      _decoderInitialized = false;
-      _decoderSource = '';
-    });
-    log('[Flutter] releaseDecoder: source=$source');
+    try {
+      await _channel.invokeMethod('releaseDecoder', {'source': source});
+      setState(() {
+        _decoderInitialized = false;
+        _decoderSource = '';
+      });
+      log('[Flutter] releaseDecoder: source=$source');
+    } catch (e) {
+      log('[Flutter] releaseDecoder error: $e');
+    }
   }
 
   @override
@@ -426,7 +440,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                 Row(
                   children: [
                     const Text('视频流显示区：'),
-                    _statusDetail.contains('已接收')
+                    _videoStreamAvailable
                         ? const Icon(Icons.circle, color: Colors.green)
                         : const Icon(Icons.circle, color: Colors.red),
                     const SizedBox(width: 8),
@@ -443,8 +457,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                   children: [
                     ElevatedButton(
                       onPressed: () async {
-                        await _videoChannel
-                            .invokeMethod('startCameraH264Stream', {
+                        await _channel.invokeMethod('startCameraH264Stream', {
                           'width': 640,
                           'height': 480,
                         });
@@ -458,8 +471,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                     const SizedBox(width: 16),
                     ElevatedButton(
                       onPressed: () async {
-                        await _videoChannel
-                            .invokeMethod('stopCameraH264Stream');
+                        await _channel.invokeMethod('stopCameraH264Stream');
                         setState(() {
                           // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
                           _statusDetail = '停止摄像头H264推流';

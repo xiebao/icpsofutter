@@ -30,7 +30,7 @@ class MainActivity: FlutterActivity() {
 
     private external fun initMqtt(phoneId: String)
     private external fun setDevP2p(devId: String)
-    private external fun startP2pVideo(devId: String)
+    private external fun startP2pVideo()
     private external fun stopP2pVideo()
     private external fun deinitMqtt()
     external fun nativeRecbVideoData(data: ByteArray, len: Int)
@@ -42,7 +42,7 @@ class MainActivity: FlutterActivity() {
         flutterEngine.platformViewsController.registry.registerViewFactory("p2p_video_view", P2pVideoViewFactory(messenger))
         val factory = P2pVideoViewFactory(messenger)
         var p2pView: P2pVideoView? = null
-        p2pView = P2pVideoView(this, MethodChannel(messenger, "p2p_video_view_manual"), 0, null)
+        p2pView = P2pVideoView(this, messenger, MethodChannel(messenger, "p2p_video_view_manual"), 0, null)
         
         methodChannel = MethodChannel(messenger, CHANNEL)
         methodChannel?.setMethodCallHandler { call, result ->
@@ -51,7 +51,9 @@ class MainActivity: FlutterActivity() {
                     try {
                         val phoneId = call.argument<String>("phoneId") ?: ""
                         Log.d(TAG, "Initializing MQTT with phoneId: $phoneId")
+                        Log.d(TAG, "[CALL] initMqtt 调用前")
                         initMqtt(phoneId)
+                        Log.d(TAG, "[CALL] initMqtt 调用后")
                         result.success(null)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to initialize MQTT", e)
@@ -62,7 +64,9 @@ class MainActivity: FlutterActivity() {
                     try {
                         val devId = call.argument<String>("devId") ?: ""
                         Log.d(TAG, "Setting device P2P: $devId")
+                        Log.d(TAG, "[CALL] setDevP2p 调用前")
                         setDevP2p(devId)
+                        Log.d(TAG, "[CALL] setDevP2p 调用后")
                         result.success(null)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to set device P2P", e)
@@ -71,9 +75,10 @@ class MainActivity: FlutterActivity() {
                 }
                 "startP2pVideo" -> {
                     try {
-                        val devId = call.argument<String>("devId") ?: ""
-                        Log.d(TAG, "Starting P2P video: $devId")
-                        startP2pVideo(devId)
+                        Log.d(TAG, "Starting P2P video")
+                        Log.d(TAG, "[CALL] startP2pVideo 调用前")
+                        startP2pVideo()
+                        Log.d(TAG, "[CALL] startP2pVideo 调用后")
                         result.success(null)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to start P2P video", e)
@@ -83,7 +88,9 @@ class MainActivity: FlutterActivity() {
                 "stopP2pVideo" -> {
                     try {
                         Log.d(TAG, "Stopping P2P video")
+                        Log.d(TAG, "[CALL] stopP2pVideo 调用前")
                         stopP2pVideo()
+                        Log.d(TAG, "[CALL] stopP2pVideo 调用后")
                         result.success(null)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to stop P2P video", e)
@@ -121,7 +128,9 @@ class MainActivity: FlutterActivity() {
                 "deinitMqtt" -> {
                     try {
                         Log.d(TAG, "Deinitializing MQTT")
+                        Log.d(TAG, "[CALL] deinitMqtt 调用前")
                         deinitMqtt()
+                        Log.d(TAG, "[CALL] deinitMqtt 调用后")
                         result.success(null)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to deinitialize MQTT", e)

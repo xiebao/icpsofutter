@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:developer';
-import 'dart:async';
+import '../services/mqtt_service.dart';
 
 class P2pVideoSimplePage extends StatefulWidget {
   final String devId;
   final String deviceName;
-  const P2pVideoSimplePage({Key? key, required this.devId, required this.deviceName}) : super(key: key);
+
+  const P2pVideoSimplePage({
+    Key? key,
+    required this.devId,
+    required this.deviceName,
+  }) : super(key: key);
 
   @override
   State<P2pVideoSimplePage> createState() => _P2pVideoSimplePageState();
@@ -14,283 +19,379 @@ class P2pVideoSimplePage extends StatefulWidget {
 
 class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
-  static const MethodChannel _videoChannel = MethodChannel('p2p_video_channel');
-  String _status = 'Idle';
+  final MqttService _mqttService = MqttService.instance;
+
+  String _status = '初始化中...';
+  String _mqttStatus = '未检查';
+  String _lastMessage = '无消息';
+  bool _isConnected = false;
   bool _videoStarted = false;
-  int _decodeMode = 0; // 只保留硬解(MediaCodec)
-  bool _isDisposed = false;
-  DateTime? _lastFrameTime;
-  String _statusDetail = '';
-  int? _textureId;
-  int? _platformViewId;
-  String _bitrate = '-- kb/s';
+  int _frameCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _channel.setMethodCallHandler(_handleMethod);
-    _videoChannel.setMethodCallHandler(_handleVideoMethod);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startP2pVideoFull();
-    });
-    Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isDisposed) {
-        timer.cancel();
-        return;
-      }
-      if (_videoStarted && _lastFrameTime != null) {
-        final now = DateTime.now();
-        final diff = now.difference(_lastFrameTime!);
-        if (diff.inSeconds > 2 && _statusDetail.contains('已接收')) {
+    _setupMethodChannel();
+    _checkMqttStatus();
+  }
+
+  void _setupMethodChannel() {
+    _channel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'onMqttMessage':
+          final messageData = call.arguments['data'] as String;
+          final length = call.arguments['length'] as int;
+          log('[P2P Simple] 收到 MQTT 消息: $messageData (长度: $length)');
           setState(() {
-            _statusDetail = '超过2秒未收到视频帧';
+            _lastMessage = '收到消息: $messageData (长度: $length)';
           });
-        }
+          break;
+        case 'onVideoFrame':
+          final Uint8List h264Frame = call.arguments;
+          setState(() {
+            _frameCount++;
+            _status = '✅ 收到真实H264视频帧 #$_frameCount (${h264Frame.length} bytes)';
+          });
+          log('[P2P Simple] 收到真实H264视频帧 #$_frameCount: ${h264Frame.length} bytes');
+          break;
       }
     });
   }
 
-  Future<dynamic> _handleMethod(MethodCall call) async {
-    if (_isDisposed) return;
-    switch (call.method) {
-      case 'onTextureFrame':
-        if (_textureId != null) {
-          try {
-            final yuvData = call.arguments['yuvData'] as List<int>;
-            final width = call.arguments['width'] as int;
-            final height = call.arguments['height'] as int;
-            if (mounted) {
-              setState(() {
-                _statusDetail = '收到视频帧，红点变绿';
-              });
-            }
-            await _channel.invokeMethod('updateTexture', {
-              'textureId': _textureId,
-              'yuvData': yuvData,
-              'width': width,
-              'height': height,
-            });
-          } catch (e) {
-            log('[Flutter] updateTexture error: $e');
-          }
-        }
-        break;
-      case 'onError':
-        if (mounted) {
-          final errorMsg = call.arguments['message'] as String;
-          setState(() {
-            _status = 'Error: $errorMsg';
-          });
-        }
-        break;
-    }
+  Future<void> _checkMqttStatus() async {
+    setState(() {
+      _mqttStatus = '检查中...';
+    });
+
+    final isInitialized = _mqttService.isInitialized;
+    final currentUserId = _mqttService.currentUserId;
+
+    setState(() {
+      _mqttStatus = 'MQTT: ${isInitialized ? "已初始化" : "未初始化"}';
+      if (currentUserId != null) {
+        _mqttStatus += ', 用户: $currentUserId';
+      }
+    });
+
+    log('[P2P Simple] MQTT状态: isInitialized=$isInitialized, currentUserId=$currentUserId');
   }
 
-  Future<dynamic> _handleVideoMethod(MethodCall call) async {
-    if (call.method == 'onVideoFrame') {
-      final Uint8List h264Frame = call.arguments;
-      _lastFrameTime = DateTime.now();
-      if (!_statusDetail.contains('已接收')) {
-        setState(() {
-          _statusDetail = '收到视频帧，红点变绿';
-        });
-      }
+  Future<void> _initMqtt() async {
+    setState(() {
+      _status = '正在初始化MQTT...';
+    });
+
+    try {
+      final success = await _mqttService.startMqtt('phoneId123');
       setState(() {
-        _bitrate = '25 kb/s'; // TODO: 可根据实际数据动态更新
+        _status = success ? 'MQTT初始化成功' : 'MQTT初始化失败';
+        _isConnected = success;
       });
+      await _checkMqttStatus();
+      log('[P2P Simple] MQTT初始化结果: $success');
+    } catch (e) {
+      setState(() {
+        _status = 'MQTT初始化异常: $e';
+        _isConnected = false;
+      });
+      log('[P2P Simple] MQTT初始化异常: $e');
     }
   }
 
   Future<void> _setDevP2p() async {
-    if (_isDisposed) return;
+    if (!_isConnected) {
+      setState(() {
+        _status = '请先初始化MQTT';
+      });
+      return;
+    }
+
+    setState(() {
+      _status = '正在设置设备P2P...';
+    });
+
     try {
       await _channel.invokeMethod('setDevP2p', {'devId': widget.devId});
-      if (mounted) {
-        setState(() {
-          _status = 'setDevP2p called: ${widget.devId}';
-        });
-      }
+      setState(() {
+        _status = '设备P2P设置成功: ${widget.devId}';
+      });
+      log('[P2P Simple] 设备P2P设置成功: ${widget.devId}');
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _status = 'Error: $e';
-        });
-      }
+      setState(() {
+        _status = '设备P2P设置失败: $e';
+      });
+      log('[P2P Simple] 设备P2P设置失败: $e');
     }
   }
 
   Future<void> _startP2pVideo() async {
-    if (_isDisposed) return;
-    try {
-      if (_textureId == null) {
-        _textureId = await _channel.invokeMethod('createTexture');
-      }
-      await _channel.invokeMethod('startP2pVideo', {
-        'devId': widget.devId,
-        'displayMode': 1,
-        'textureId': _textureId,
-        'decodeMode': _decodeMode,
-      });
+    if (!_isConnected) {
       setState(() {
-        _videoStarted = true;
-        _statusDetail = 'startP2pVideo已调用，等待第一帧...';
+        _status = '请先初始化MQTT';
       });
+      return;
+    }
+
+    setState(() {
+      _status = '正在启动P2P视频...';
+      _frameCount = 0;
+    });
+
+    try {
+      await _channel.invokeMethod('startP2pVideo', {'devId': widget.devId});
+      setState(() {
+        _status = 'P2P视频启动成功，等待真实H264视频流...';
+        _videoStarted = true;
+      });
+      log('[P2P Simple] P2P视频启动成功，等待真实视频流');
     } catch (e) {
       setState(() {
-        _statusDetail = '启动异常: $e';
+        _status = 'P2P视频启动失败: $e';
       });
+      log('[P2P Simple] P2P视频启动失败: $e');
     }
   }
 
   Future<void> _stopP2pVideo() async {
-    if (_isDisposed) return;
+    setState(() {
+      _status = '正在停止P2P视频...';
+    });
+
     try {
       await _channel.invokeMethod('stopP2pVideo');
-      if (_textureId != null) {
-        try {
-          await _channel.invokeMethod('disposeTexture', {'textureId': _textureId});
-        } catch (e) {}
-        _textureId = null;
-      }
-      if (mounted) {
-        setState(() {
-          _status = 'stopped';
-          _lastFrameTime = null;
-          _statusDetail = '已停止视频流';
-          _videoStarted = false;
-        });
-      }
+      setState(() {
+        _status = 'P2P视频已停止';
+        _videoStarted = false;
+      });
+      log('[P2P Simple] P2P视频已停止');
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _status = 'Error: $e';
-        });
-      }
+      setState(() {
+        _status = '停止P2P视频失败: $e';
+      });
+      log('[P2P Simple] 停止P2P视频失败: $e');
     }
   }
 
-  Future<void> _startP2pVideoFull() async {
-    if (_isDisposed) return;
+  Future<void> _testMqttConnection() async {
+    setState(() {
+      _status = '测试MQTT连接...';
+    });
+
     try {
-      await _setDevP2p();
-      await _startP2pVideo();
-      if (mounted) {
+      // 初始化MQTT
+      final success = await _mqttService.startMqtt('phoneId123');
+      if (!success) {
         setState(() {
-          _status = '一键启动完成';
+          _status = 'MQTT连接失败';
+        });
+        return;
+      }
+
+      setState(() {
+        _status = 'MQTT连接成功，等待消息...';
+        _isConnected = true;
+      });
+
+      // 等待一段时间看是否有消息
+      await Future.delayed(Duration(seconds: 5));
+
+      if (_lastMessage == '无消息') {
+        setState(() {
+          _status = 'MQTT连接成功，但未收到消息（可能设备离线）';
+        });
+      } else {
+        setState(() {
+          _status = 'MQTT连接成功，已收到消息';
         });
       }
+
+      await _checkMqttStatus();
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _status = 'Error: $e';
-        });
-      }
+      setState(() {
+        _status = 'MQTT连接测试失败: $e';
+      });
+      log('[P2P Simple] MQTT连接测试失败: $e');
     }
   }
 
-  @override
-  void dispose() {
-    _isDisposed = true;
-    _stopP2pVideo();
-    super.dispose();
+  Future<void> _testFullFlow() async {
+    setState(() {
+      _status = '开始完整流程测试...';
+      _frameCount = 0;
+    });
+
+    try {
+      // 1. 初始化MQTT
+      log('[P2P Simple] 步骤1: 初始化MQTT');
+      final success = await _mqttService.startMqtt('phoneId123');
+      if (!success) {
+        setState(() {
+          _status = 'MQTT初始化失败';
+        });
+        return;
+      }
+
+      // 等待一下确保MQTT连接建立
+      await Future.delayed(Duration(seconds: 2));
+
+      // 2. 设置设备P2P
+      log('[P2P Simple] 步骤2: 设置设备P2P');
+      await _channel.invokeMethod('setDevP2p', {'devId': widget.devId});
+
+      // 等待一下确保设备设置完成
+      await Future.delayed(Duration(seconds: 1));
+
+      // 3. 启动P2P视频
+      log('[P2P Simple] 步骤3: 启动P2P视频');
+      await _channel.invokeMethod('startP2pVideo', {'devId': widget.devId});
+
+      setState(() {
+        _status = '完整流程测试完成，等待真实H264视频流...';
+        _isConnected = true;
+        _videoStarted = true;
+      });
+      await _checkMqttStatus();
+      log('[P2P Simple] 完整流程测试完成');
+    } catch (e) {
+      setState(() {
+        _status = '完整流程测试失败: $e';
+      });
+      log('[P2P Simple] 完整流程测试失败: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(56),
-        child: AppBar(
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.deviceName, style: const TextStyle(fontSize: 18)),
-              Text(_bitrate, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  '/device_settings',
-                  arguments: {
-                    'devId': widget.devId,
-                    'deviceName': widget.deviceName,
-                  },
-                );
-              },
-            ),
-          ],
-        ),
+      appBar: AppBar(
+        title: Text('${widget.deviceName} - P2P视频'),
+        backgroundColor: _videoStarted ? Colors.green : Colors.orange,
       ),
-      body: Center(
+      body: Padding(
+        padding: EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 320,
-              height: 240,
-              child: _videoStarted
-                  ? AndroidView(
-                      viewType: 'p2p_video_view',
-                      onPlatformViewCreated: (int id) {
-                        _platformViewId = id;
-                      },
-                      creationParams: const {},
-                      creationParamsCodec: const StandardMessageCodec(),
-                    )
-                  : Container(
-                      color: Colors.black12,
-                      alignment: Alignment.center,
-                      child: const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
-                    ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            // 设备信息
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   const Text('Version: 1.0.0'),
-                  const Text('视频流状态：'),
-                  _statusDetail.contains('已接收') ? const Icon(Icons.circle, color: Colors.green) : const Icon(Icons.circle, color: Colors.red),
-                      ],
+                  Text('设备信息:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text('设备名称: ${widget.deviceName}'),
+                  Text('设备ID: ${widget.devId}'),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child:  Text(_statusDetail, style: const TextStyle(fontSize: 12)),  
-              
-            ),
-            
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              child:
-               SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child:Container(
-                  width: MediaQuery.of(context).size.width,
-                child:  Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _BottomIconButton(icon: Icons.power_settings_new, label: ''),
-                    _BottomIconButton(icon: Icons.volume_off, label: ''),
-                    _BottomIconButton(icon: Icons.cut, label: ''),
-                    _BottomIconButton(icon: Icons.videocam, label: ''),
-                    _BottomIconButton(icon: Icons.auto_mode, label: ''),
-                    _BottomIconButton(icon: Icons.open_in_full, label: ''),
-                  ],
+            SizedBox(height: 16),
+
+            // 状态显示
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color:
+                    _isConnected ? Colors.green.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _isConnected ? Colors.green : Colors.orange,
                 ),
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '连接状态: ${_isConnected ? "已连接" : "未连接"}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _isConnected ? Colors.green : Colors.orange,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text('MQTT状态: $_mqttStatus'),
+                  Text('当前状态: $_status'),
+                  if (_videoStarted) ...[
+                    SizedBox(height: 8),
+                    Text('视频帧数: $_frameCount',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+
+            // 消息显示
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('最新消息:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text(_lastMessage, style: TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+
+            // 操作按钮
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton(
+                  onPressed: _checkMqttStatus,
+                  child: Text('检查MQTT'),
+                ),
+                ElevatedButton(
+                  onPressed: _testMqttConnection,
+                  child: Text('测试MQTT连接'),
+                ),
+                ElevatedButton(
+                  onPressed: _initMqtt,
+                  child: Text('初始化MQTT'),
+                ),
+                ElevatedButton(
+                  onPressed: _setDevP2p,
+                  child: Text('设置设备P2P'),
+                ),
+                ElevatedButton(
+                  onPressed: _startP2pVideo,
+                  child: Text('启动P2P视频'),
+                ),
+                ElevatedButton(
+                  onPressed: _stopP2pVideo,
+                  child: Text('停止P2P视频'),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+
+            // 一键测试
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _testFullFlow,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text('一键完整流程测试'),
               ),
             ),
           ],
@@ -299,21 +400,3 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
     );
   }
 }
-
-class _BottomIconButton extends StatelessWidget {
-  final IconData? icon;
-  final String label;
-  const _BottomIconButton({this.icon, required this.label});
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (icon != null)
-          Icon(icon, size: 24,color: Colors.grey,)
-        else
-          Text(label, style: TextStyle(fontSize: 16)),
-      ],
-    );
-  }
-} 

@@ -84,7 +84,7 @@ class MqttService {
   Future<void> onAppResumed(String userId) async {
     log('[MQTT Service] onAppResumed called, user: $userId');
     _isAppActive = true;
-    
+
     if (!_isInitialized || _currentUserId != userId) {
       await startMqtt(userId);
     } else {
@@ -96,7 +96,7 @@ class MqttService {
   Future<void> onAppPaused() async {
     log('[MQTT Service] onAppPaused called');
     _isAppActive = false;
-    
+
     // 可以选择是否在后台停止 MQTT
     // 如果需要在后台保持连接，可以注释掉下面的代码
     await stopMqtt();
@@ -112,4 +112,4 @@ class MqttService {
   bool get isInitialized => _isInitialized;
   String? get currentUserId => _currentUserId;
   bool get isAppActive => _isAppActive;
-} 
+}
