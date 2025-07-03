@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:developer';
+import '../providers/message_monitor.dart';
+import '../providers/device_event_notifier.dart';
 
 class MqttService {
   static const MethodChannel _channel = MethodChannel('p2p_video_channel');
+  static MethodChannel get channel => _channel;
   static MqttService? _instance;
   static bool _isInitialized = false;
   static String? _currentUserId;
   static bool _isAppActive = true;
+  static const MethodChannel videoFrameChannel =
+      MethodChannel('video_frame_channel');
+  static MethodChannel get videoChannel => videoFrameChannel;
 
   // 单例模式
   factory MqttService() {
@@ -31,11 +37,33 @@ class MqttService {
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'onMqttMessage':
-          final messageData = call.arguments['data'] as String;
-          final length = call.arguments['length'] as int;
+          print(
+              '[DEBUG][MQTT Service] onMqttMessage call.arguments: \\${call.arguments}');
+          String msg = '';
+          if (call.arguments is Map && call.arguments['data'] != null) {
+            msg = call.arguments['data'].toString();
+          } else {
+            msg = call.arguments?.toString() ?? '';
+          }
+          print('[DEBUG][MQTT Service] parsed msg: \\${msg}');
+          messageMonitor.addMqttMessage(msg);
+          final messageData = msg;
+          final length =
+              call.arguments is Map && call.arguments['length'] != null
+                  ? call.arguments['length'] as int
+                  : msg.length;
           print("[MQTT Service]<<<==" + messageData);
           log('[MQTT Service] 收到 MQTT 消息: $messageData (长度: $length)');
+          // 新增：收到MQTT消息时，推送设备事件（默认devId='camId123'）
+          deviceEventNotifier.addEvent(DeviceEvent(
+            DeviceEventType.online,
+            'camId123',
+            messageData,
+          ));
           // 这里可以添加全局的消息处理逻辑，比如显示通知等
+
+          // if(call.arguments['data']['online']==1)
+          //   DeviceEventType.
           break;
       }
     });
@@ -119,6 +147,7 @@ class MqttService {
     try {
       final ret = await _channel
           .invokeMethod('sendJsonMsg', {'json': json, 'topic': topic});
+      messageMonitor.addSendMessage('topic: $topic, json: $json');
       print("[MQTT Service]==>>" + topic + ",json:" + json.toString());
       log('[MQTT Service] sendJsonMsg 返回: $ret');
       return ret as int;

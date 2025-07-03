@@ -18,7 +18,6 @@ class P2pVideoSimplePage extends StatefulWidget {
 }
 
 class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
-  static const MethodChannel _channel = MethodChannel('p2p_video_channel');
   final MqttService _mqttService = MqttService.instance;
 
   String _status = '初始化中...';
@@ -36,26 +35,7 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
   }
 
   void _setupMethodChannel() {
-    _channel.setMethodCallHandler((call) async {
-      switch (call.method) {
-        case 'onMqttMessage':
-          final messageData = call.arguments['data'] as String;
-          final length = call.arguments['length'] as int;
-          log('[P2P Simple] 收到 MQTT 消息: $messageData (长度: $length)');
-          setState(() {
-            _lastMessage = '收到消息: $messageData (长度: $length)';
-          });
-          break;
-        case 'onVideoFrame':
-          final Uint8List h264Frame = call.arguments;
-          setState(() {
-            _frameCount++;
-            _status = '✅ 收到真实H264视频帧 #$_frameCount (${h264Frame.length} bytes)';
-          });
-          log('[P2P Simple] 收到真实H264视频帧 #$_frameCount: ${h264Frame.length} bytes');
-          break;
-      }
-    });
+    // MqttService.channel.setMethodCallHandler((call) async { ... }); // 已移除，禁止页面注册 handler
   }
 
   Future<void> _checkMqttStatus() async {
@@ -111,7 +91,8 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
     });
 
     try {
-      await _channel.invokeMethod('setDevP2p', {'devId': widget.devId});
+      await MqttService.channel
+          .invokeMethod('setDevP2p', {'devId': widget.devId});
       setState(() {
         _status = '设备P2P设置成功: ${widget.devId}';
       });
@@ -138,7 +119,8 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
     });
 
     try {
-      await _channel.invokeMethod('startP2pVideo', {'devId': widget.devId});
+      await MqttService.channel
+          .invokeMethod('startP2pVideo', {'devId': widget.devId});
       setState(() {
         _status = 'P2P视频启动成功，等待真实H264视频流...';
         _videoStarted = true;
@@ -158,7 +140,7 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
     });
 
     try {
-      await _channel.invokeMethod('stopP2pVideo');
+      await MqttService.channel.invokeMethod('stopP2pVideo');
       setState(() {
         _status = 'P2P视频已停止';
         _videoStarted = false;
@@ -236,14 +218,16 @@ class _P2pVideoSimplePageState extends State<P2pVideoSimplePage> {
 
       // 2. 设置设备P2P
       log('[P2P Simple] 步骤2: 设置设备P2P');
-      await _channel.invokeMethod('setDevP2p', {'devId': widget.devId});
+      await MqttService.channel
+          .invokeMethod('setDevP2p', {'devId': widget.devId});
 
       // 等待一下确保设备设置完成
       await Future.delayed(Duration(seconds: 1));
 
       // 3. 启动P2P视频
       log('[P2P Simple] 步骤3: 启动P2P视频');
-      await _channel.invokeMethod('startP2pVideo', {'devId': widget.devId});
+      await MqttService.channel
+          .invokeMethod('startP2pVideo', {'devId': widget.devId});
 
       setState(() {
         _status = '完整流程测试完成，等待真实H264视频流...';

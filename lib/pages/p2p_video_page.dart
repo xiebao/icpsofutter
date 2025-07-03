@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:developer';
 import 'dart:async';
+import '../providers/message_monitor.dart';
+import '../providers/device_event_notifier.dart';
+import '../services/mqtt_service.dart';
 
 class P2pVideoPage extends StatefulWidget {
   final String devId;
@@ -14,11 +17,10 @@ class P2pVideoPage extends StatefulWidget {
 }
 
 class _P2pVideoPageState extends State<P2pVideoPage> {
-  static const MethodChannel _channel = MethodChannel('p2p_video_channel');
-  static const MethodChannel _videoChannel = MethodChannel('p2p_video_channel');
   String _status = 'Idle';
   bool _videoStarted = false;
   int _decodeMode = 0; // 只保留硬解(MediaCodec)
+  int _displayMode = 1; // 只用Texture模式
   bool _isDisposed = false;
   DateTime? _lastFrameTime;
   String _statusDetail = '';
@@ -29,8 +31,6 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   @override
   void initState() {
     super.initState();
-    _channel.setMethodCallHandler(_handleMethod);
-    _videoChannel.setMethodCallHandler(_handleVideoMethod);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startP2pVideoFull();
     });
@@ -65,7 +65,7 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
                 _statusDetail = '收到视频帧，红点变绿';
               });
             }
-            await _channel.invokeMethod('updateTexture', {
+            await MqttService.channel.invokeMethod('updateTexture', {
               'textureId': _textureId,
               'yuvData': yuvData,
               'width': width,
@@ -91,12 +91,13 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
     if (call.method == 'onVideoFrame') {
       final Uint8List h264Frame = call.arguments;
       _lastFrameTime = DateTime.now();
-      if (!_statusDetail.contains('已接收')) {
+      if (!_videoStarted) {
         setState(() {
-          _statusDetail = '收到视频帧，红点变绿';
+          _videoStarted = true;
         });
       }
       setState(() {
+        _statusDetail = '收到视频帧，红点变绿';
         _bitrate = '25 kb/s'; // TODO: 可根据实际数据动态更新
       });
     }
@@ -105,7 +106,8 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   Future<void> _setDevP2p() async {
     if (_isDisposed) return;
     try {
-      await _channel.invokeMethod('setDevP2p', {'devId': widget.devId});
+      await MqttService.channel
+          .invokeMethod('setDevP2p', {'devId': widget.devId});
       if (mounted) {
         setState(() {
           _status = 'setDevP2p called: ${widget.devId}';
@@ -124,16 +126,15 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
     if (_isDisposed) return;
     try {
       if (_textureId == null) {
-        _textureId = await _channel.invokeMethod('createTexture');
+        _textureId = await MqttService.channel.invokeMethod('createTexture');
       }
-      await _channel.invokeMethod('startP2pVideo', {
+      await MqttService.channel.invokeMethod('startP2pVideo', {
         'devId': widget.devId,
-        'displayMode': 1,
+        'displayMode': _displayMode,
         'textureId': _textureId,
         'decodeMode': _decodeMode,
       });
       setState(() {
-        _videoStarted = true;
         _statusDetail = 'startP2pVideo已调用，等待第一帧...';
       });
     } catch (e) {
@@ -146,12 +147,20 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   Future<void> _stopP2pVideo() async {
     if (_isDisposed) return;
     try {
-      await _channel.invokeMethod('stopP2pVideo');
-      if (_textureId != null) {
+      log('[P2pVideoPage] 调用 stopP2pVideo');
+      if (_platformViewId != null) {
+        final channel = MethodChannel('p2p_video_view_$_platformViewId');
+        await channel.invokeMethod('stopP2pVideo');
+      } else {
+        await MqttService.channel.invokeMethod('stopP2pVideo');
+      }
+      if (_displayMode == 1 && _textureId != null) {
         try {
-          await _channel
+          await MqttService.channel
               .invokeMethod('disposeTexture', {'textureId': _textureId});
-        } catch (e) {}
+        } catch (e) {
+          log('[P2pVideoPage] disposeTexture error: $e');
+        }
         _textureId = null;
       }
       if (mounted) {
@@ -161,8 +170,10 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
           _statusDetail = '已停止视频流';
           _videoStarted = false;
         });
+        log('[P2pVideoPage] 已停止视频流');
       }
     } catch (e) {
+      log('[P2pVideoPage] stopP2pVideo error: $e');
       if (mounted) {
         setState(() {
           _status = 'Error: $e';
@@ -193,7 +204,11 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   @override
   void dispose() {
     _isDisposed = true;
-    _stopP2pVideo();
+    try {
+      _stopP2pVideo();
+    } catch (e) {
+      log('[P2pVideoPage] dispose error: $e');
+    }
     super.dispose();
   }
 
@@ -232,74 +247,237 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
           ],
         ),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 320,
-              height: 240,
-              child: _videoStarted
-                  ? AndroidView(
-                      viewType: 'p2p_video_view',
-                      onPlatformViewCreated: (int id) {
-                        _platformViewId = id;
-                      },
-                      creationParams: const {},
-                      creationParamsCodec: const StandardMessageCodec(),
-                    )
-                  : Container(
-                      color: Colors.black12,
-                      alignment: Alignment.center,
-                      child: const Text('没有启动视频流',
-                          style: TextStyle(color: Colors.grey)),
-                    ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Version: 1.0.0'),
-                  const Text('视频流状态：'),
-                  _statusDetail.contains('已接收')
-                      ? const Icon(Icons.circle, color: Colors.green)
-                      : const Icon(Icons.circle, color: Colors.red),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(_statusDetail, style: const TextStyle(fontSize: 12)),
-            ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Container(
-                  width: MediaQuery.of(context).size.width,
+      body: Stack(
+        children: [
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildVideoView(),
+                AnimatedBuilder(
+                  animation: messageMonitor,
+                  builder: (context, _) {
+                    print(
+                        '[DEBUG][UI] MQTT消息列表 rebuild: messages=${messageMonitor.messages.length}');
+                    if (messageMonitor.messages.isEmpty)
+                      return SizedBox.shrink();
+                    return Container(
+                      width: double.infinity,
+                      color: Colors.black.withOpacity(0.05),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('MQTT消息列表',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          ...messageMonitor.messages.reversed
+                              .take(5)
+                              .map((msg) => Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 2),
+                                    child: Text(msg,
+                                        style: const TextStyle(fontSize: 12)),
+                                  )),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _BottomIconButton(
-                          icon: Icons.power_settings_new, label: ''),
-                      _BottomIconButton(icon: Icons.volume_off, label: ''),
-                      _BottomIconButton(icon: Icons.cut, label: ''),
-                      _BottomIconButton(icon: Icons.videocam, label: ''),
-                      _BottomIconButton(icon: Icons.auto_mode, label: ''),
-                      _BottomIconButton(icon: Icons.open_in_full, label: ''),
+                      const Text('Version: 1.0.0'),
+                      const Text('视频流状态：'),
+                      _statusDetail.contains('已接收')
+                          ? const Icon(Icons.circle, color: Colors.green)
+                          : const Icon(Icons.circle, color: Colors.red),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child:
+                      Text(_statusDetail, style: const TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(height: 24),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Container(
+                      width: MediaQuery.of(context).size.width,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _BottomIconButton(
+                              icon: Icons.power_settings_new, label: ''),
+                          _BottomIconButton(icon: Icons.volume_off, label: ''),
+                          _BottomIconButton(icon: Icons.cut, label: ''),
+                          _BottomIconButton(icon: Icons.videocam, label: ''),
+                          _BottomIconButton(icon: Icons.auto_mode, label: ''),
+                          _BottomIconButton(
+                              icon: Icons.open_in_full, label: ''),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          // 浮动消息监控区域
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedBuilder(
+              animation: messageMonitor,
+              builder: (context, _) {
+                print(
+                    '[DEBUG][UI] AnimatedBuilder rebuild: messages=${messageMonitor.messages.length}');
+                if (messageMonitor.messages.isEmpty) return SizedBox.shrink();
+                return Dismissible(
+                  key: const ValueKey('message_monitor'),
+                  direction: DismissDirection.down,
+                  onDismissed: (_) => messageMonitor.clear(),
+                  child: Container(
+                    margin: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('消息监控',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
+                            IconButton(
+                              icon:
+                                  const Icon(Icons.close, color: Colors.white),
+                              onPressed: () => messageMonitor.clear(),
+                              tooltip: '清空',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Expanded(
+                          child: ListView(
+                            reverse: true,
+                            children: messageMonitor.messages.reversed
+                                .map((msg) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 2),
+                                      child: Text(msg,
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12)),
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // 全局设备事件通知区域
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 200,
+            child: AnimatedBuilder(
+              animation: deviceEventNotifier,
+              builder: (context, _) {
+                final events = deviceEventNotifier.events
+                    .where((e) =>
+                        e.type == DeviceEventType.online ||
+                        e.type == DeviceEventType.offline ||
+                        e.type == DeviceEventType.statusChanged)
+                    .toList();
+                if (events.isEmpty) return SizedBox.shrink();
+                return Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.withOpacity(0.92),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('设备事件',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => deviceEventNotifier.clear(),
+                            tooltip: '清空',
+                          ),
+                        ],
+                      ),
+                      ...events.reversed.take(5).map((e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              '[${e.type.name}] ${e.deviceId.isNotEmpty ? e.deviceId + ': ' : ''}${e.message}',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 13),
+                            ),
+                          )),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildVideoView() {
+    try {
+      return SizedBox(
+        width: 320,
+        height: 240,
+        child: (_videoStarted && _textureId != null)
+            ? Texture(textureId: _textureId!)
+            : Container(
+                color: Colors.black12,
+                alignment: Alignment.center,
+                child:
+                    const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
+              ),
+      );
+    } catch (e) {
+      log('[P2pVideoPage] _buildVideoView error: $e');
+      return Container(
+        width: 320,
+        height: 240,
+        color: Colors.black12,
+        alignment: Alignment.center,
+        child: const Text('视频流异常', style: TextStyle(color: Colors.red)),
+      );
+    }
   }
 }
 

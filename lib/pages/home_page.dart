@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
+import 'package:ipcso_main/pages/video_main_page.dart';
 import 'p2p_video_main_page.dart';
 import 'p2p_video_simple_page.dart';
 import 'p2p_video_page.dart';
@@ -135,9 +136,10 @@ class _HomePageState extends State<HomePage> {
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (context) => P2pVideoPage(
+                                      builder: (context) => VideoMainPage(
                                         devId: d['devId']!,
-                                        deviceName: d['deviceName']!,
+                                        deviceName:
+                                            d['deviceName']! + "-simple",
                                       ),
                                     ),
                                   );
@@ -168,10 +170,9 @@ class _HomePageState extends State<HomePage> {
                                   onTap: () {
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
-                                        builder: (context) =>
-                                            P2pVideoSimplePage(
+                                        builder: (context) => P2pVideoPage(
                                           devId: d['devId']!,
-                                          deviceName: d['deviceName']!,
+                                          deviceName: d['deviceName']! + "-all",
                                         ),
                                       ),
                                     );
