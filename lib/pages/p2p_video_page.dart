@@ -31,6 +31,8 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   @override
   void initState() {
     super.initState();
+    // 注册 handler，防止多页面冲突
+    MqttService.channel.setMethodCallHandler(_handleMethod);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startP2pVideoFull();
     });
@@ -204,11 +206,28 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   @override
   void dispose() {
     _isDisposed = true;
-    try {
-      _stopP2pVideo();
-    } catch (e) {
-      log('[P2pVideoPage] dispose error: $e');
+    // 解绑 handler，防止页面切换冲突
+    MqttService.channel.setMethodCallHandler(null);
+    // 1. 停止视频流
+    _stopP2pVideo();
+    // 2. 释放 Texture
+    if (_textureId != null) {
+      try {
+        MqttService.channel
+            .invokeMethod('disposeTexture', {'textureId': _textureId});
+      } catch (e) {
+        log('[P2pVideoPage] disposeTexture error: $e');
+      }
+      _textureId = null;
     }
+    // 3. 释放解码器
+    try {
+      MqttService.channel.invokeMethod('releaseDecoder', {});
+    } catch (e) {
+      log('[P2pVideoPage] releaseDecoder error: $e');
+    }
+    // 4. 其它资源
+    _videoStarted = false;
     super.dispose();
   }
 
@@ -315,8 +334,19 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _BottomIconButton(
-                              icon: Icons.power_settings_new, label: ''),
+                          ElevatedButton(
+                            onPressed: () async {
+                              setState(() {
+                                _status = '正在测试SendJsonMsg...';
+                              });
+                              await MqttService.instance.testSendJsonMsg();
+                              setState(() {
+                                _status = 'SendJsonMsg测试已触发，请查看日志';
+                              });
+                            },
+                            child: _BottomIconButton(
+                                icon: Icons.power_settings_new, label: ''),
+                          ),
                           _BottomIconButton(icon: Icons.volume_off, label: ''),
                           _BottomIconButton(icon: Icons.cut, label: ''),
                           _BottomIconButton(icon: Icons.videocam, label: ''),

@@ -4,7 +4,6 @@ import 'dart:developer';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
-import '../services/mqtt_service.dart';
 
 class P2pVideoMainPage extends StatefulWidget {
   final String devId;
@@ -16,6 +15,9 @@ class P2pVideoMainPage extends StatefulWidget {
 }
 
 class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
+  static const MethodChannel _channel = MethodChannel('p2p_video_channel');
+  static const MethodChannel _videoChannel =
+      MethodChannel('video_frame_channel');
   String _status = 'Idle';
   late final TextEditingController _devIdController;
   bool _videoStarted = false;
@@ -35,6 +37,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   void initState() {
     super.initState();
     _devIdController = TextEditingController(text: widget.devId);
+    _channel.setMethodCallHandler(_handleMethod);
     _requestPermissions();
 
     // 添加定时器检查视频流状态
@@ -63,7 +66,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       }
     });
 
-    MqttService.videoChannel.setMethodCallHandler((call) async {
+    _videoChannel.setMethodCallHandler((call) async {
       if (call.method == 'onVideoFrame') {
         final Uint8List h264Frame = call.arguments;
         print('[Flutter] onVideoFrame received, len=h264Frame.length}');
@@ -82,7 +85,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
             _statusDetail = '收到onVideoFrame, 初始化解码器';
           });
         }
-        await MqttService.videoChannel.invokeMethod('queueH264', {
+        await _videoChannel.invokeMethod('queueH264', {
           'data': h264Frame,
           'pts': DateTime.now().millisecondsSinceEpoch,
           'source': 'p2p',
@@ -137,7 +140,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
             }
 
             // 通知Texture更新
-            await MqttService.channel.invokeMethod('updateTexture', {
+            await _channel.invokeMethod('updateTexture', {
               'textureId': _textureId,
               'yuvData': yuvData,
               'width': width,
@@ -174,7 +177,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
 
     try {
       log('[Flutter] 调用 setDevP2p: ${_devIdController.text}');
-      await MqttService.channel
+      await _channel
           .invokeMethod('setDevP2p', {'devId': _devIdController.text});
       if (mounted) {
         setState(() {
@@ -204,7 +207,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       }
       if (_displayMode == 1) {
         log('[Flutter] 创建 Texture');
-        _textureId = await MqttService.channel.invokeMethod('createTexture');
+        _textureId = await _channel.invokeMethod('createTexture');
         if (_textureId == null) {
           throw Exception('Failed to create texture');
         }
@@ -220,7 +223,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       setState(() {
         _statusDetail = '等待设备回调数据流...';
       });
-      await MqttService.channel.invokeMethod('startP2pVideo', {
+      await _channel.invokeMethod('startP2pVideo', {
         'devId': _devIdController.text,
         'displayMode': _displayMode,
         'textureId': _textureId,
@@ -246,11 +249,11 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
         final channel = MethodChannel('p2p_video_view_$_platformViewId');
         await channel.invokeMethod('stopP2pVideo');
       } else {
-        await MqttService.channel.invokeMethod('stopP2pVideo');
+        await _channel.invokeMethod('stopP2pVideo');
       }
       if (_displayMode == 1 && _textureId != null) {
         try {
-          await MqttService.channel
+          await _channel
               .invokeMethod('disposeTexture', {'textureId': _textureId});
         } catch (e) {
           log('[Flutter] disposeTexture error: $e');
@@ -319,7 +322,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
       setState(() {
         _decodeMode = mode;
       });
-      await MqttService.channel.invokeMethod('setDecodeMode', {'mode': mode});
+      await _channel.invokeMethod('setDecodeMode', {'mode': mode});
     } catch (e) {
       log('[Flutter] setDecodeMode error: $e');
       if (mounted) {
@@ -331,7 +334,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   }
 
   Future<void> _initDecoder(int width, int height, {String source = ''}) async {
-    await MqttService.channel.invokeMethod('initDecoder', {
+    await _channel.invokeMethod('initDecoder', {
       'textureId': _textureId,
       'width': width,
       'height': height,
@@ -346,8 +349,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
 
   Future<void> _releaseDecoder({String source = ''}) async {
     try {
-      await MqttService.channel
-          .invokeMethod('releaseDecoder', {'source': source});
+      await _channel.invokeMethod('releaseDecoder', {'source': source});
       setState(() {
         _decoderInitialized = false;
         _decoderSource = '';
@@ -361,13 +363,40 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
   @override
   void dispose() {
     _isDisposed = true;
-    if (_textureId != null) {
-      MqttService.channel
-          .invokeMethod('disposeTexture', {'textureId': _textureId});
+    _channel.setMethodCallHandler(null);
+    _videoChannel.setMethodCallHandler(null);
+
+    // 1. 停止视频流并释放资源（同步等待）
+    _releaseAllResources().then((_) {
+      super.dispose();
+    });
+  }
+
+  Future<void> _releaseAllResources() async {
+    try {
+      await _stopP2pVideo();
+      if (_textureId != null) {
+        await _channel
+            .invokeMethod('disposeTexture', {'textureId': _textureId});
+        _textureId = null;
+      }
+      await _channel.invokeMethod('releaseDecoder', {});
+    } catch (e) {
+      log('[P2pVideoMainPage] 资源释放异常: $e');
     }
     _devIdController.dispose();
-    _releaseDecoder();
-    super.dispose();
+    _videoStarted = false;
+    _decodeMode = 0;
+    _displayMode = 1;
+    _isDisposed = false;
+    _lastFrameTime = null;
+    _isHardwareDecodingFailed = false;
+    _decoderInitialized = false;
+    _decoderSource = '';
+    _statusDetail = '';
+    _textureId = null;
+    _platformViewId = null;
+    _videoStreamAvailable = false;
   }
 
   @override
@@ -480,8 +509,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                   children: [
                     ElevatedButton(
                       onPressed: () async {
-                        await MqttService.channel
-                            .invokeMethod('startCameraH264Stream', {
+                        await _channel.invokeMethod('startCameraH264Stream', {
                           'width': 640,
                           'height': 480,
                         });
@@ -495,8 +523,7 @@ class _P2pVideoMainPageState extends State<P2pVideoMainPage> {
                     const SizedBox(width: 16),
                     ElevatedButton(
                       onPressed: () async {
-                        await MqttService.channel
-                            .invokeMethod('stopCameraH264Stream');
+                        await _channel.invokeMethod('stopCameraH264Stream');
                         setState(() {
                           // _videoStarted = false; // 不要销毁AndroidView，保证回调链路
                           _statusDetail = '停止摄像头H264推流';
