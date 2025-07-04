@@ -6,7 +6,7 @@ import '../pages/settings_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/privacy_policy_page.dart';
 import '../pages/device_settings_page.dart';
-import '../pages/p2p_video_simple_page.dart';
+import '../pages/p2p_video_page.dart';
 import '../pages/test_update_page.dart';
 import '../pages/wifi_config_page.dart';
 
@@ -17,7 +17,7 @@ class AppRouter {
   static const String settings = '/settings';
   static const String profile = '/profile';
   static const String privacy = '/privacy';
-  static const String p2pVideoSimple = '/p2p_video_simple';
+  static const String p2pVideo = '/p2p_video';
   static const String testUpdate = '/test_update';
   static const String wifiConfig = '/wifi_config';
   // 需要参数的页面不在routes里注册
@@ -29,7 +29,7 @@ class AppRouter {
     settings: (context) => SettingsPage(),
     profile: (context) => ProfilePage(),
     privacy: (context) => PrivacyPolicyPage(),
-    p2pVideoSimple: (context) => P2pVideoSimplePage(devId: '', deviceName: ''),
+    p2pVideo: (context) => P2pVideoPage(devId: '', deviceName: ''),
     testUpdate: (context) => TestUpdatePage(),
     wifiConfig: (context) => WifiConfigPage(),
   };

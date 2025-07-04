@@ -11,9 +11,6 @@ class MqttService {
   static bool _isInitialized = false;
   static String? _currentUserId;
   static bool _isAppActive = true;
-  static const MethodChannel videoFrameChannel =
-      MethodChannel('video_frame_channel');
-  static MethodChannel get videoChannel => videoFrameChannel;
 
   // 单例模式
   factory MqttService() {

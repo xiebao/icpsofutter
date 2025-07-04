@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
-import 'package:ipcso_main/pages/video_main_page.dart';
-import 'p2p_video_main_page.dart';
-import 'p2p_video_simple_page.dart';
 import 'p2p_video_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -136,7 +133,7 @@ class _HomePageState extends State<HomePage> {
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (context) => VideoMainPage(
+                                      builder: (context) => P2pVideoPage(
                                         devId: d['devId']!,
                                         deviceName:
                                             d['deviceName']! + "-simple",
@@ -145,17 +142,7 @@ class _HomePageState extends State<HomePage> {
                                   );
                                 },
                                 isGrid: true,
-                              )),
-                          _TestDeviceCard(
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        P2pVideoMainPage(devId: 'camId123'),
-                                  ),
-                                );
-                              },
-                              isGrid: true),
+                              ))
                         ],
                       )
                     : ListView(
@@ -180,7 +167,7 @@ class _HomePageState extends State<HomePage> {
                                   isGrid: false,
                                 ),
                               )),
-                          _TestDeviceCard(
+                          /*  _TestDeviceCard(
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
@@ -189,7 +176,7 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 );
                               },
-                              isGrid: false),
+                              isGrid: false), */
                         ],
                       ),
               ),

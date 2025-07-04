@@ -17,6 +17,9 @@ class P2pVideoPage extends StatefulWidget {
 }
 
 class _P2pVideoPageState extends State<P2pVideoPage> {
+  static const MethodChannel _videoChannel =
+      MethodChannel('video_frame_channel');
+
   String _status = 'Idle';
   bool _videoStarted = false;
   int _decodeMode = 0; // 只保留硬解(MediaCodec)
@@ -26,12 +29,14 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   String _statusDetail = '';
   int? _textureId;
   int? _platformViewId;
+  bool _videoStreamAvailable = false;
+
   String _bitrate = '-- kb/s';
 
   @override
   void initState() {
     super.initState();
-    MqttService.channel.setMethodCallHandler(_handleMethod);
+    _videoChannel.setMethodCallHandler(_handleVideoMethod);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startP2pVideoFull();
     });
@@ -52,58 +57,6 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
     });
   }
 
-  Future<dynamic> _handleMethod(MethodCall call) async {
-    if (_isDisposed) return;
-    switch (call.method) {
-      case 'onTextureFrame':
-        if (_textureId != null) {
-          try {
-            final yuvData = call.arguments['yuvData'] as List<int>;
-            final width = call.arguments['width'] as int;
-            final height = call.arguments['height'] as int;
-            if (mounted) {
-              setState(() {
-                _statusDetail = '收到视频帧，红点变绿';
-              });
-            }
-            await MqttService.channel.invokeMethod('updateTexture', {
-              'textureId': _textureId,
-              'yuvData': yuvData,
-              'width': width,
-              'height': height,
-            });
-          } catch (e) {
-            log('[Flutter] updateTexture error: $e');
-          }
-        }
-        break;
-      case 'onError':
-        if (mounted) {
-          final errorMsg = call.arguments['message'] as String;
-          setState(() {
-            _status = 'Error: $errorMsg';
-          });
-        }
-        break;
-    }
-  }
-
-  Future<dynamic> _handleVideoMethod(MethodCall call) async {
-    if (call.method == 'onVideoFrame') {
-      final Uint8List h264Frame = call.arguments;
-      _lastFrameTime = DateTime.now();
-      if (!_videoStarted) {
-        setState(() {
-          _videoStarted = true;
-        });
-      }
-      setState(() {
-        _statusDetail = '收到视频帧，红点变绿';
-        _bitrate = '25 kb/s'; // TODO: 可根据实际数据动态更新
-      });
-    }
-  }
-
   Future<void> _setDevP2p() async {
     if (_isDisposed) return;
     try {
@@ -120,28 +73,6 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
           _status = 'Error: $e';
         });
       }
-    }
-  }
-
-  Future<void> _startP2pVideo() async {
-    if (_isDisposed) return;
-    try {
-      if (_textureId == null) {
-        _textureId = await MqttService.channel.invokeMethod('createTexture');
-      }
-      await MqttService.channel.invokeMethod('startP2pVideo', {
-        'devId': widget.devId,
-        'displayMode': _displayMode,
-        'textureId': _textureId,
-        'decodeMode': _decodeMode,
-      });
-      setState(() {
-        _statusDetail = 'startP2pVideo已调用，等待第一帧...';
-      });
-    } catch (e) {
-      setState(() {
-        _statusDetail = '启动异常: $e';
-      });
     }
   }
 
@@ -215,7 +146,7 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
         });
         if (mounted) {
           setState(() {
-            _status = '一键启动完成';
+            _status = '启动P2P视频流';
             _statusDetail = 'startP2pVideo已调用，等待第一帧...';
           });
         }
@@ -233,8 +164,12 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   @override
   void dispose() {
     _isDisposed = true;
-    MqttService.channel.setMethodCallHandler(null);
-    _stopP2pVideo();
+    _videoChannel.setMethodCallHandler(null);
+    try {
+      _stopP2pVideo();
+    } catch (e) {
+      log('[P2pVideoPage] dispose error: $e');
+    }
     super.dispose();
   }
 
@@ -318,7 +253,7 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
                     children: [
                       const Text('Version: 1.0.0'),
                       const Text('视频流状态：'),
-                      _statusDetail.contains('已接收')
+                      _videoStreamAvailable
                           ? const Icon(Icons.circle, color: Colors.green)
                           : const Icon(Icons.circle, color: Colors.red),
                     ],
@@ -519,6 +454,22 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
         creationParamsCodec: const StandardMessageCodec(),
       ),
     );
+  }
+
+  Future<dynamic> _handleVideoMethod(MethodCall call) async {
+    if (call.method == 'onVideoFrame') {
+      final Uint8List h264Frame = call.arguments;
+      _lastFrameTime = DateTime.now();
+      if (!_videoStarted) {
+        setState(() {
+          _videoStarted = true;
+        });
+      }
+      setState(() {
+        _videoStreamAvailable = true;
+        _statusDetail = '已收到视频流，len=${h264Frame.length}';
+      });
+    }
   }
 }
 
