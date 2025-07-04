@@ -535,10 +535,10 @@ Java_com_mainipc_xiebaoxin_P2pVideoView_startP2pVideo(
                 
                 // 添加定时检查，看是否收到回调
                 std::thread([&]() {
-                    std::this_thread::sleep_for(std::chrono::seconds(5));
-                    LOGI("[P2pVideoView] 5秒后检查：是否收到RecbVideoData回调？");
+                    std::this_thread::sleep_for(std::chrono::seconds(10));
+                    LOGI("[P2pVideoView] 10秒后检查：是否收到RecbVideoData回调？");
                     if (g_frameCount.load() == 0) {
-                        LOGE("[P2pVideoView] 警告：5秒内没有收到任何视频帧！");
+                        LOGE("[P2pVideoView] 警告：10秒内没有收到任何视频帧！");
                         LOGE("[P2pVideoView] 可能原因：1.设备端没有响应 2.P2P连接失败 3.设备端没有发送视频流");
                         
                         // 尝试检查P2P连接状态
@@ -713,10 +713,10 @@ Java_com_mainipc_xiebaoxin_MainActivity_startP2pVideo(
                 
                 // 添加定时检查，看是否收到回调
                 std::thread([&]() {
-                    std::this_thread::sleep_for(std::chrono::seconds(5));
-                    LOGI("[自检] 5秒后检查：是否收到RecbVideoData回调？");
+                    std::this_thread::sleep_for(std::chrono::seconds(10));
+                    LOGI("[自检] 10秒后检查：是否收到RecbVideoData回调？");
                     if (g_frameCount.load() == 0) {
-                        LOGE("[自检] 警告：5秒内没有收到任何视频帧！");
+                        LOGE("[自检] 警告：10秒内没有收到任何视频帧！");
                         LOGE("[自检] 可能原因：1.设备端没有响应 2.P2P连接失败 3.设备端没有发送视频流");
                     } else {
                         LOGI("[自检] 收到视频帧数量: %d", g_frameCount.load());

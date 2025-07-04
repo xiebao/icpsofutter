@@ -31,7 +31,6 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   @override
   void initState() {
     super.initState();
-    // 注册 handler，防止多页面冲突
     MqttService.channel.setMethodCallHandler(_handleMethod);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startP2pVideoFull();
@@ -188,9 +187,9 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
     if (_isDisposed) return;
     try {
       await _setDevP2p();
-      await _startP2pVideo();
       if (mounted) {
         setState(() {
+          _videoStarted = true;
           _status = '一键启动完成';
         });
       }
@@ -203,31 +202,39 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
     }
   }
 
+  // AndroidView创建后启动P2P视频流
+  void _startP2pVideoOnPlatformView() async {
+    if (_isDisposed) return;
+    try {
+      if (_platformViewId != null) {
+        final channel = MethodChannel('p2p_video_view_$_platformViewId');
+        await channel.invokeMethod('startP2pVideo', {
+          'devId': widget.devId,
+          'displayMode': 0, // PlatformView模式
+          'decodeMode': _decodeMode,
+        });
+        if (mounted) {
+          setState(() {
+            _status = '一键启动完成';
+            _statusDetail = 'startP2pVideo已调用，等待第一帧...';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _status = 'Error: $e';
+          _statusDetail = '启动异常: $e';
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
-    // 解绑 handler，防止页面切换冲突
     MqttService.channel.setMethodCallHandler(null);
-    // 1. 停止视频流
     _stopP2pVideo();
-    // 2. 释放 Texture
-    if (_textureId != null) {
-      try {
-        MqttService.channel
-            .invokeMethod('disposeTexture', {'textureId': _textureId});
-      } catch (e) {
-        log('[P2pVideoPage] disposeTexture error: $e');
-      }
-      _textureId = null;
-    }
-    // 3. 释放解码器
-    try {
-      MqttService.channel.invokeMethod('releaseDecoder', {});
-    } catch (e) {
-      log('[P2pVideoPage] releaseDecoder error: $e');
-    }
-    // 4. 其它资源
-    _videoStarted = false;
     super.dispose();
   }
 
@@ -345,7 +352,21 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
                               });
                             },
                             child: _BottomIconButton(
-                                icon: Icons.power_settings_new, label: ''),
+                                icon: Icons.notification_add, label: ''),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              if (_platformViewId != null) {
+                                final channel = MethodChannel(
+                                    'p2p_video_view_$_platformViewId');
+                                await channel.invokeMethod('stopP2pVideo');
+                              } else {
+                                await MqttService.channel
+                                    .invokeMethod('stopP2pVideo');
+                              }
+                            },
+                            child: _BottomIconButton(
+                                icon: Icons.stop_circle, label: ''),
                           ),
                           _BottomIconButton(icon: Icons.volume_off, label: ''),
                           _BottomIconButton(icon: Icons.cut, label: ''),
@@ -485,29 +506,19 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   }
 
   Widget _buildVideoView() {
-    try {
-      return SizedBox(
-        width: 320,
-        height: 240,
-        child: (_videoStarted && _textureId != null)
-            ? Texture(textureId: _textureId!)
-            : Container(
-                color: Colors.black12,
-                alignment: Alignment.center,
-                child:
-                    const Text('没有启动视频流', style: TextStyle(color: Colors.grey)),
-              ),
-      );
-    } catch (e) {
-      log('[P2pVideoPage] _buildVideoView error: $e');
-      return Container(
-        width: 320,
-        height: 240,
-        color: Colors.black12,
-        alignment: Alignment.center,
-        child: const Text('视频流异常', style: TextStyle(color: Colors.red)),
-      );
-    }
+    return SizedBox(
+      width: 320,
+      height: 240,
+      child: AndroidView(
+        viewType: 'p2p_video_view',
+        onPlatformViewCreated: (int id) {
+          _platformViewId = id;
+          _startP2pVideoOnPlatformView();
+        },
+        creationParams: const {},
+        creationParamsCodec: const StandardMessageCodec(),
+      ),
+    );
   }
 }
 

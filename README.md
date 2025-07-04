@@ -38,3 +38,7 @@ samples, guidance on mobile development, and a full API reference.
 NDK 必须用 26.3.11579264
 CMake 用 3.22.1
 build.gradle 里 ndkVersion、externalNativeBuild、abiFilters、arguments 必须和 IDE 配置一致
+
+P2P视频流和摄像头H264推流测试都用到了同一个_textureId和解码器（_initDecoder），并且都通过p2p_video_channel与原生通信。
+两者的区别在于_initDecoder的source参数不同：P2P流用source: 'p2p'，摄像头推流用source: 'camera'。
+_decoderInitialized和_decoderSource是全局变量，二者共用。
