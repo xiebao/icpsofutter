@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:ipcso_main/gen_l10n/app_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'pages/root_page.dart';
+import 'pages/onboarding_page.dart';
+import 'pages/login_page.dart';
 
 import 'auth/auth_provider.dart';
 import 'providers/theme_provider.dart';
@@ -43,6 +47,11 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
+  Future<bool> _shouldShowOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return !(prefs.getBool('onboarding_shown') ?? false);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Listen to theme and auth providers
@@ -86,11 +95,28 @@ class MyApp extends StatelessWidget {
         ...AppRouter.routes,
       },
       onGenerateRoute: AppRouter.onGenerateRoute,
-
-      // --- Home Screen Logic ---
-      // If user is authenticated, show HomePage, otherwise show LoginPage.
-      initialRoute:
-          authProvider.isAuthenticated ? AppRouter.root : AppRouter.login,
+      home: FutureBuilder<bool>(
+        future: _shouldShowOnboarding(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return SizedBox();
+          if (snapshot.data!) {
+            return OnboardingPage(
+              onFinish: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('onboarding_shown', true);
+                (context as Element).reassemble();
+              },
+            );
+          } else {
+            final authProvider = Provider.of<AuthProvider>(context);
+            if (authProvider.isAuthenticated) {
+              return RootPage();
+            } else {
+              return LoginPage();
+            }
+          }
+        },
+      ),
     );
   }
 }

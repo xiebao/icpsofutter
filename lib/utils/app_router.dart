@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../pages/home_page.dart';
 import '../pages/login_page.dart';
-import '../pages/root_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/privacy_policy_page.dart';
@@ -9,21 +8,22 @@ import '../pages/device_settings_page.dart';
 import '../pages/p2p_video_page.dart';
 import '../pages/test_update_page.dart';
 import '../pages/wifi_config_page.dart';
+import '../pages/root_page.dart'; // Added import for RootPage
 
 class AppRouter {
-  static const String root = '/';
-  static const String home = '/home';
   static const String login = '/login';
+  static const String home = '/home';
   static const String settings = '/settings';
   static const String profile = '/profile';
   static const String privacy = '/privacy';
   static const String p2pVideo = '/p2p_video';
   static const String testUpdate = '/test_update';
   static const String wifiConfig = '/wifi_config';
+  static const String root = '/root';
   // 需要参数的页面不在routes里注册
 
   static final Map<String, WidgetBuilder> routes = {
-    root: (context) => RootPage(),
+    root: (context) => RootPage(), // Changed from HomePage to RootPage
     home: (context) => HomePage(),
     login: (context) => LoginPage(),
     settings: (context) => SettingsPage(),

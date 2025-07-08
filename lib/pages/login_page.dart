@@ -21,17 +21,17 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         _isLoading = true;
       });
-      
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final success = await authProvider.login(_email, _password);
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
 
         if (success) {
-          Navigator.of(context).pushReplacementNamed(AppRouter.home);
+          Navigator.of(context).pushReplacementNamed(AppRouter.root);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(AppLocalizations.of(context)!.loginFailed)),
@@ -57,14 +57,16 @@ class _LoginPageState extends State<LoginPage> {
                 TextFormField(
                   decoration: InputDecoration(labelText: l10n.username),
                   keyboardType: TextInputType.emailAddress,
-                  validator: (value) => value!.isEmpty ? l10n.emailRequired : null,
+                  validator: (value) =>
+                      value!.isEmpty ? l10n.emailRequired : null,
                   onSaved: (value) => _email = value!,
                 ),
                 SizedBox(height: 12),
                 TextFormField(
                   decoration: InputDecoration(labelText: l10n.password),
                   obscureText: true,
-                  validator: (value) => value!.isEmpty ? l10n.passwordRequired : null,
+                  validator: (value) =>
+                      value!.isEmpty ? l10n.passwordRequired : null,
                   onSaved: (value) => _password = value!,
                 ),
                 SizedBox(height: 20),
@@ -82,7 +84,8 @@ class _LoginPageState extends State<LoginPage> {
                   child: Text(l10n.dontHaveAccount),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pushNamed(AppRouter.privacy),
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed(AppRouter.privacy),
                   child: Text(l10n.privacyPolicy),
                 )
               ],

@@ -23,11 +23,9 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
   String _status = 'Idle';
   bool _videoStarted = false;
   int _decodeMode = 0; // 只保留硬解(MediaCodec)
-  int _displayMode = 1; // 只用Texture模式
   bool _isDisposed = false;
   DateTime? _lastFrameTime;
   String _statusDetail = '';
-  int? _textureId;
   int? _platformViewId;
   bool _videoStreamAvailable = false;
 
@@ -86,15 +84,7 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
       } else {
         await MqttService.channel.invokeMethod('stopP2pVideo');
       }
-      if (_displayMode == 1 && _textureId != null) {
-        try {
-          await MqttService.channel
-              .invokeMethod('disposeTexture', {'textureId': _textureId});
-        } catch (e) {
-          log('[P2pVideoPage] disposeTexture error: $e');
-        }
-        _textureId = null;
-      }
+
       if (mounted) {
         setState(() {
           _status = 'stopped';
@@ -163,13 +153,15 @@ class _P2pVideoPageState extends State<P2pVideoPage> {
 
   @override
   void dispose() {
-    _isDisposed = true;
+    // 1. 解绑 MethodChannel 回调，防止回调到已销毁对象
     _videoChannel.setMethodCallHandler(null);
-    try {
-      _stopP2pVideo();
-    } catch (e) {
+    // 2. 释放 native 资源（同步/异步）
+    _stopP2pVideo().catchError((e) {
       log('[P2pVideoPage] dispose error: $e');
-    }
+    });
+    // 3. 标记已销毁
+    _isDisposed = true;
+    // 4. 调用父类 dispose
     super.dispose();
   }
 

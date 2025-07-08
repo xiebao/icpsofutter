@@ -162,4 +162,14 @@ class MqttService {
     final ret = await sendJsonMsg(testJson, testTopic);
     log('[MQTT Service] testSendJsonMsg 返回: $ret');
   }
+
+  // 通过MQTT发送设置分辨率的指令
+  Future<void> _setResolutionViaMqtt(
+      int width, int height, String devId) async {
+    final msg =
+        '{"cmd":"set_resolution","width":$width,"height":$height,"devId":"$devId"}';
+    // TODO: 替换为实际的topic
+    final topic = "/yyt/${devId}/msg";
+    await MqttService.instance.sendJsonMsg(msg, topic);
+  }
 }
