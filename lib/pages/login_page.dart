@@ -31,7 +31,14 @@ class _LoginPageState extends State<LoginPage> {
         });
 
         if (success) {
-          Navigator.of(context).pushReplacementNamed(AppRouter.root);
+          final args = ModalRoute.of(context)?.settings.arguments as Map?;
+          if (args != null && args['redirect'] != null) {
+            Navigator.of(context).pushReplacementNamed(args['redirect']);
+            // 如果有原请求信息，可以在这里重试原请求
+            // 例如：DioClient.instance._dio.fetch(args['originalRequest']);
+          } else {
+            Navigator.of(context).pushReplacementNamed(AppRouter.root);
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(AppLocalizations.of(context)!.loginFailed)),

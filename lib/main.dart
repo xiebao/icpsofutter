@@ -13,6 +13,10 @@ import 'providers/theme_provider.dart';
 import 'utils/app_router.dart';
 import 'services/app_lifecycle_service.dart';
 import 'services/mqtt_service.dart';
+import 'api/dio_client.dart';
+import 'api/auth_interceptor.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   // Ensure that Flutter bindings are initialized
@@ -58,7 +62,11 @@ class MyApp extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context);
 
+    // 注册拦截器（只注册一次）
+    DioClient.addInterceptor(AuthInterceptor(authProvider, navigatorKey));
+
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Music App',
       debugShowCheckedModeBanner: false,
 
