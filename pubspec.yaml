@@ -26,6 +26,7 @@ dependencies:
   qr_flutter: ^4.1.0
   flutter_screenutil: ^5.8.4
   vector_math: ^2.1.4
+  mobile_scanner: ^7.0.1
 
 dev_dependencies:
   flutter_test:

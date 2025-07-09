@@ -3,6 +3,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import '../services/wifi_config_service.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class WifiConfigPage extends StatefulWidget {
   @override
@@ -14,6 +15,8 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
   final _pwdController = TextEditingController();
   final WifiConfigService _wifiService = WifiConfigService();
   final NetworkInfo _networkInfo = NetworkInfo();
+  final TextEditingController _deviceIdController = TextEditingController();
+  String? _deviceId;
 
   String _securityType = 'WPA';
   String? _qrData;
@@ -37,6 +40,7 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
   @override
   void dispose() {
     _pwdController.dispose();
+    _deviceIdController.dispose();
     super.dispose();
   }
 
@@ -233,7 +237,14 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
           ? Center(child: CircularProgressIndicator())
           : Padding(
               padding: EdgeInsets.all(16.0),
-              child: _showQr ? _buildQrView() : _buildInputView(),
+              child: Column(
+                children: [
+                  _buildDeviceIdView(),
+                  Expanded(
+                    child: _showQr ? _buildQrView() : _buildInputView(),
+                  ),
+                ],
+              ),
             ),
     );
   }
@@ -268,9 +279,6 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
             SizedBox(height: 16),
           ],
 
-          // WiFi网络选择
-          Text('WiFi网络',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           SizedBox(height: 12),
 
           if (_currentWifiName.isNotEmpty) ...[
@@ -423,6 +431,8 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
           // ),
           // SizedBox(height: 32),
 
+          SizedBox(height: 16),
+
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -435,6 +445,49 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDeviceIdView() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: _deviceIdController,
+            decoration: InputDecoration(
+              labelText: '请输入设备编号',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _deviceId = value;
+              });
+            },
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return '请输入设备编号';
+              }
+              return null;
+            },
+          ),
+        ),
+        SizedBox(width: 8),
+        IconButton(
+          icon: Icon(Icons.qr_code_scanner),
+          tooltip: '扫码输入',
+          onPressed: () async {
+            final result = await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => _InlineScanPage()),
+            );
+            if (result != null && result is String) {
+              setState(() {
+                _deviceIdController.text = result;
+                _deviceId = result;
+              });
+            }
+          },
+        ),
+      ],
     );
   }
 
@@ -494,6 +547,27 @@ class _WifiConfigPageState extends State<WifiConfigPage> {
           ],
         ),
       ],
+    );
+  }
+}
+
+// 内联扫码页面实现
+class _InlineScanPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('扫码设备编号')),
+      body: MobileScanner(
+        onDetect: (BarcodeCapture capture) {
+          for (final barcode in capture.barcodes) {
+            final String? code = barcode.rawValue;
+            if (code != null && code.isNotEmpty) {
+              Navigator.of(context).pop(code);
+              break;
+            }
+          }
+        },
+      ),
     );
   }
 }
